@@ -17,10 +17,11 @@ export interface SearchResult {
   repo: string;        // "sickn33/antigravity-awesome-skills"
   repoStars: number;
   repoDesc: string;
+  repoUrl: string;     // https://github.com/owner/repo
   skillName: string;
   skillDesc: string;
   skillPath: string;   // "skills/code-review-quality/SKILL.md"
-  downloadUrl: string; // raw URL
+  downloadUrl: string; // raw URL，空字符串表示未找到确切文件
 }
 
 /** 安装结果 */

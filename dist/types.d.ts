@@ -16,6 +16,7 @@ export interface SearchResult {
     repo: string;
     repoStars: number;
     repoDesc: string;
+    repoUrl: string;
     skillName: string;
     skillDesc: string;
     skillPath: string;

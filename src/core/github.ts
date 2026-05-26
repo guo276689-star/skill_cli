@@ -4,16 +4,32 @@ import { SearchResult } from '../types';
 const GITHUB_API = 'https://api.github.com';
 const FETCH_TIMEOUT_MS = 15_000;
 
-export interface GitHubSearchItem {
+// ──── 类型 ────
+
+interface GitHubRepoItem {
+  full_name: string;
+  stargazers_count: number;
+  description: string | null;
+  topics: string[];
+  html_url: string;
+}
+
+interface GitHubRepoSearchResponse {
+  items: GitHubRepoItem[];
+  total_count: number;
+}
+
+interface GitHubCodeItem {
   repository: { full_name: string; stargazers_count: number; description: string | null };
   path: string;
 }
 
-interface GitHubSearchResponse {
-  items: GitHubSearchItem[];
+interface GitHubCodeSearchResponse {
+  items: GitHubCodeItem[];
 }
 
-/** 创建 GitHub API 请求头（统一工厂） */
+// ──── 请求工具 ────
+
 function createGitHubHeaders(raw = false): Record<string, string> {
   const headers: Record<string, string> = {
     'Accept': raw ? 'application/vnd.github.v3.raw' : 'application/vnd.github.v3+json',
@@ -24,7 +40,6 @@ function createGitHubHeaders(raw = false): Record<string, string> {
   return headers;
 }
 
-/** 带超时的 fetch 封装 */
 async function fetchWithTimeout(url: string, headers: Record<string, string>): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -35,56 +50,184 @@ async function fetchWithTimeout(url: string, headers: Record<string, string>): P
   }
 }
 
-/**
- * 搜索 GitHub 上包含 SKILL.md 的仓库
- */
-export async function searchSkills(keyword: string, page = 1): Promise<SearchResult[]> {
-  const q = encodeURIComponent(`filename:SKILL.md ${keyword} agent skills`);
-  const url = `${GITHUB_API}/search/code?q=${q}&sort=stars&order=desc&per_page=10&page=${page}`;
-  const headers = createGitHubHeaders();
+// ──── 搜索：两阶段策略 ────
 
-  const res = await fetchWithTimeout(url, headers);
-  if (!res.ok) {
-    if (res.status === 403) {
-      throw new Error('GitHub API 限流。设置 GITHUB_TOKEN 环境变量可提升限制。');
-    }
-    if (res.status === 422) {
-      // 搜索语法错误，放宽条件再试
-      const q2 = encodeURIComponent(`SKILL.md ${keyword}`);
-      const url2 = `${GITHUB_API}/search/code?q=${q2}&sort=stars&order=desc&per_page=10`;
-      const res2 = await fetchWithTimeout(url2, headers);
-      if (!res2.ok) throw new Error(`GitHub API 错误: ${res2.status}`);
-      const data2 = await res2.json() as GitHubSearchResponse;
-      return parseSearchResults(data2);
-    }
-    throw new Error(`GitHub API 错误: ${res.status}`);
+/**
+ * Phase 1: Repository Search — 搜索包含 SKILL.md 的仓库，按 ⭐ 排序
+ */
+async function searchRepos(params: {
+  keyword: string;
+  minStars?: number;
+  page?: number;
+}): Promise<GitHubRepoItem[]> {
+  const { keyword, minStars = 0, page = 1 } = params;
+
+  // 构建查询：topic 优先 + 关键词 + 最小 stars
+  const parts: string[] = [];
+
+  // 用 topic 过滤（skills 相关仓库通常带这些标签）
+  if (keyword.length <= 3) {
+    // 短关键词用 topic
+    parts.push('topic:agent-skills');
   }
 
-  const data = await res.json() as GitHubSearchResponse;
-  return parseSearchResults(data);
+  parts.push(keyword);
+  parts.push('SKILL.md in:readme');
+
+  // stars 过滤
+  if (minStars > 0) {
+    parts.push(`stars:>=${minStars}`);
+  }
+
+  const q = encodeURIComponent(parts.join(' '));
+  const url = `${GITHUB_API}/search/repositories?q=${q}&sort=stars&order=desc&per_page=15&page=${page}`;
+
+  const headers = createGitHubHeaders();
+  const res = await fetchWithTimeout(url, headers);
+
+  if (!res.ok) {
+    // 降级：去掉 topic 和 in:readme 约束
+    const q2 = encodeURIComponent(`SKILL.md ${keyword}${minStars > 0 ? ` stars:>=${minStars}` : ''}`);
+    const url2 = `${GITHUB_API}/search/repositories?q=${q2}&sort=stars&order=desc&per_page=15`;
+    const res2 = await fetchWithTimeout(url2, headers);
+    if (!res2.ok) throw new Error(`GitHub API 错误: ${res2.status}`);
+    const data2 = await res2.json() as GitHubRepoSearchResponse;
+    return data2.items ?? [];
+  }
+
+  const data = await res.json() as GitHubRepoSearchResponse;
+  return data.items ?? [];
 }
 
-function parseSearchResults(data: GitHubSearchResponse): SearchResult[] {
-  if (!data.items || data.items.length === 0) return [];
+/**
+ * Phase 2: 对指定仓库查找其中的 SKILL.md 文件
+ */
+async function findSkillFilesInRepo(repoFull: string): Promise<string[]> {
+  const q = encodeURIComponent(`filename:SKILL.md repo:${repoFull}`);
+  const url = `${GITHUB_API}/search/code?q=${q}&per_page=5`;
+  const headers = createGitHubHeaders();
 
-  return data.items.map((item: GitHubSearchItem) => {
-    const repoFull = item.repository.full_name;
-    const skillPath = item.path;
-    const skillName = extractSkillName(skillPath, repoFull);
+  try {
+    const res = await fetchWithTimeout(url, headers);
+    if (!res.ok) return [];
 
-    return {
-      repo: repoFull,
-      repoStars: item.repository.stargazers_count ?? 0,
-      repoDesc: item.repository.description ?? '',
-      skillName,
-      skillDesc: '',
-      skillPath,
-      downloadUrl: `https://raw.githubusercontent.com/${repoFull}/main/${skillPath}`,
-    };
-  });
+    const data = await res.json() as GitHubCodeSearchResponse;
+    return (data.items ?? []).map(i => i.path);
+  } catch {
+    return [];
+  }
 }
 
-/** 从路径提取可读的 skill 名称（正则简化版） */
+// ──── 主搜索入口 ────
+
+export interface SearchOptions {
+  minStars?: number;
+  page?: number;
+}
+
+export async function searchSkills(
+  keyword: string,
+  options: SearchOptions = {},
+): Promise<SearchResult[]> {
+  const { minStars = 0, page = 1 } = options;
+
+  // Phase 1: repo 搜索
+  const repos = await searchRepos({ keyword, minStars, page });
+  if (repos.length === 0) return [];
+
+  // Phase 2: 并行查找每个仓库的 SKILL.md 文件
+  const results: SearchResult[] = [];
+
+  await Promise.all(
+    repos.map(async (repo) => {
+      try {
+        const skillFiles = await findSkillFilesInRepo(repo.full_name);
+
+        if (skillFiles.length === 0) {
+          // 没有找到确切文件，仍显示仓库作为候选
+          results.push({
+            repo: repo.full_name,
+            repoStars: repo.stargazers_count,
+            repoDesc: repo.description ?? '',
+            repoUrl: repo.html_url,
+            skillName: repo.full_name.split('/')[1],
+            skillDesc: '',
+            skillPath: '',
+            downloadUrl: '',
+          });
+          return;
+        }
+
+        for (const skillPath of skillFiles) {
+          const skillName = extractSkillName(skillPath, repo.full_name);
+          results.push({
+            repo: repo.full_name,
+            repoStars: repo.stargazers_count,
+            repoDesc: repo.description ?? '',
+            repoUrl: repo.html_url,
+            skillName,
+            skillDesc: '',
+            skillPath,
+            downloadUrl: `https://raw.githubusercontent.com/${repo.full_name}/main/${skillPath}`,
+          });
+        }
+      } catch {
+        // 跳过失败的 repo
+      }
+    }),
+  );
+
+  // 按 stars 排序
+  results.sort((a, b) => b.repoStars - a.repoStars);
+
+  return results;
+}
+
+/**
+ * 搜索 + 获取 frontmatter 描述（只取 top 5 详细获取）
+ */
+export async function searchSkillsWithMeta(
+  keyword: string,
+  options: SearchOptions = {},
+): Promise<SearchResult[]> {
+  const results = await searchSkills(keyword, options);
+  if (results.length === 0) return [];
+
+  // 去重（同 repo 的多个 skill 合并展示）
+  const seen = new Set<string>();
+  const deduped: SearchResult[] = [];
+  for (const r of results) {
+    const key = `${r.repo}|${r.skillName}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(r);
+    }
+  }
+
+  // 取 top 5 获取实际 frontmatter
+  const top5 = deduped.filter(r => r.downloadUrl).slice(0, 5);
+  const enriched = await Promise.all(
+    top5.map(async (r) => {
+      try {
+        const content = await fetchSkillContent(r.downloadUrl);
+        const fm = parseFrontmatterRaw(content);
+        return { ...r, skillDesc: fm.description ?? r.repoDesc, skillName: fm.name ?? r.skillName };
+      } catch {
+        return { ...r, skillDesc: r.repoDesc };
+      }
+    }),
+  );
+
+  // 合并：enriched top5 + 剩余 deduped
+  const rest = deduped.filter(
+    r => !enriched.some(e => e.repo === r.repo && e.skillName === r.skillName),
+  );
+
+  return [...enriched, ...rest].slice(0, 20);
+}
+
+// ──── 工具函数 ────
+
 function extractSkillName(pathStr: string, repo: string): string {
   const match = pathStr.match(/(?:^|\/)([^/]+)\/SKILL\.md$/);
   if (match) return match[1];
@@ -92,15 +235,10 @@ function extractSkillName(pathStr: string, repo: string): string {
   return pathStr.replace('/SKILL.md', '').replace(/\//g, '-');
 }
 
-/**
- * 获取单个 SKILL.md 的原始内容
- */
 export async function fetchSkillContent(downloadUrl: string): Promise<string> {
   const headers = createGitHubHeaders(true);
-
   const res = await fetchWithTimeout(downloadUrl, headers);
   if (!res.ok) {
-    // 回退：尝试其他分支
     const altUrl = downloadUrl.replace('/main/', '/master/');
     const res2 = await fetchWithTimeout(altUrl, headers);
     if (!res2.ok) throw new Error(`下载失败: ${res.status}`);
@@ -109,45 +247,20 @@ export async function fetchSkillContent(downloadUrl: string): Promise<string> {
   return res.text();
 }
 
-/**
- * 搜索 Skills 时同时获取每个 skill 的 frontmatter（用于展示描述）
- */
-export async function searchSkillsWithMeta(keyword: string, page = 1): Promise<SearchResult[]> {
-  const results = await searchSkills(keyword, page);
-  // 只取前 5 个获取描述，避免请求过多
-  const top5 = results.slice(0, 5);
-
-  const enriched = await Promise.all(
-    top5.map(async (r) => {
-      try {
-        const content = await fetchSkillContent(r.downloadUrl);
-        const frontmatter = parseFrontmatterRaw(content);
-        return {
-          ...r,
-          skillDesc: frontmatter.description ?? r.skillDesc,
-          skillName: frontmatter.name ?? r.skillName,
-        };
-      } catch {
-        return r;
-      }
-    })
-  );
-
-  return [...enriched, ...results.slice(5)];
-}
-
-/** 解析 YAML frontmatter */
-export function parseFrontmatterRaw(content: string): { name?: string; description?: string; runAs?: string } {
+export function parseFrontmatterRaw(content: string): {
+  name?: string;
+  description?: string;
+  runAs?: string;
+} {
   const match = content.match(/^---\n([\s\S]*?)\n---/);
   if (!match) return {};
-
   try {
     const fm = yaml.load(match[1]) as Record<string, unknown> | null;
     if (!fm || typeof fm !== 'object') return {};
     return {
       name: typeof fm.name === 'string' ? fm.name : undefined,
       description: typeof fm.description === 'string' ? fm.description : undefined,
-      runAs: typeof fm.runAs === 'string' ? fm.runAs as 'inline' | 'subagent' : undefined,
+      runAs: typeof fm.runAs === 'string' ? (fm.runAs as 'inline' | 'subagent') : undefined,
     };
   } catch {
     return {};

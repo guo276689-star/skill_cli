@@ -20,8 +20,10 @@ program
 program
     .command('search <keyword>')
     .description('搜索 GitHub 上的 Skills')
-    .action(async (keyword) => {
-    await (0, search_1.searchCommand)(keyword);
+    .option('-s, --min-stars <number>', '最小 star 数（如 100）', '0')
+    .action(async (keyword, options) => {
+    const minStars = parseInt(options?.minStars ?? '0', 10) || 0;
+    await (0, search_1.searchCommand)(keyword, { minStars });
 });
 program
     .command('install <repo> [skill-name]')

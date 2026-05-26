@@ -5,7 +5,7 @@
 ## 安装
 
 ```bash
-npm install -g github:guo276689-star/skills-cli
+npm install -g github:guo276689-star/skill_cli
 ```
 
 ## 使用

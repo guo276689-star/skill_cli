@@ -18,7 +18,7 @@
   "keywords": ["reasonix", "skills", "ai-agent", "cli"],
   "repository": {
     "type": "git",
-    "url": "https://github.com/guo276689-star/skills-cli"
+    "url": "https://github.com/guo276689-star/skill_cli"
   },
   "license": "MIT",
   "dependencies": {

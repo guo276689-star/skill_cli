@@ -5,20 +5,29 @@
 ## 安装
 
 ```bash
-npm install -g github:guo276689-star/skill_cli
+git clone https://github.com/guo276689-star/skill_cli.git
+cd skill_cli
+npm install
+npm link
 ```
 
 ## 使用
 
 ```bash
-# 搜索 GitHub 上的 Skills
-skills search "code review"
+# 搜索 GitHub 上的 Skills（热门 + 近期更新）
+skills search "code review" --min-stars 100
+
+# 只看最近 3 个月更新的
+skills search react --updated-within 3m
 
 # 安装 Skill
 skills install addyosmani/agent-skills code-review-and-quality
 
 # 列出本地已安装
 skills list
+
+# 查看 Skill 详细信息
+skills info audit-security
 
 # 健康检查
 skills doctor
@@ -32,6 +41,10 @@ skills remove code-review-and-quality
 `search` 和 `install` 需要 GitHub API：
 
 ```bash
+# Windows (cmd)
+set GITHUB_TOKEN=你的token
+
+# Mac/Linux
 export GITHUB_TOKEN=你的token
 ```
 
@@ -47,12 +60,3 @@ Token 在 [GitHub Settings → Tokens](https://github.com/settings/tokens) 生�
 ## 兼容性
 
 支持 Reasonix、Claude Code、Codex、Cursor 等所有使用 SKILL.md 格式的 AI Agent 平台。
-
-## 开发
-
-```bash
-git clone https://github.com/guo276689-star/skill_cli.git
-cd skills-cli
-npm install
-npm run build
-```

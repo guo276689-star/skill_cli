@@ -6,6 +6,7 @@ import { installCommand } from './commands/install';
 import { listCommand } from './commands/list';
 import { doctorCommand } from './commands/doctor';
 import { removeCommand } from './commands/remove';
+import { infoCommand } from './commands/info';
 
 const program = new Command();
 
@@ -42,6 +43,13 @@ program
   });
 
 program
+  .command('info [name]')
+  .description('查看 Skill 详细信息（frontmatter + body 预览）')
+  .action(async (name?: string) => {
+    await infoCommand(name ?? '');
+  });
+
+program
   .command('doctor [name]')
   .description('检查 Skills 格式和兼容性')
   .action(async (name?: string) => {
@@ -63,6 +71,7 @@ if (process.argv.length <= 2) {
   console.log(`  ${chalk.cyan('search <keyword>')}    搜索 GitHub 上的 Skills`);
   console.log(`  ${chalk.cyan('install <repo> [name]')}  安装 Skill`);
   console.log(`  ${chalk.cyan('list')}                  列出本地已安装`);
+  console.log(`  ${chalk.cyan('info [name]')}           查看 Skill 详细信息`);
   console.log(`  ${chalk.cyan('doctor [name]')}         健康检查`);
   console.log(`  ${chalk.cyan('remove <name>')}          移除 Skill`);
   console.log();
@@ -70,6 +79,7 @@ if (process.argv.length <= 2) {
   console.log(`  skills search \"code review\"`);
   console.log(`  skills install addyosmani/agent-skills code-review-quality`);
   console.log(`  skills list`);
+  console.log(`  skills info audit-security`);
   console.log(`  skills doctor`);
   console.log();
   process.exit(0);

@@ -51,7 +51,7 @@ Token 在 [GitHub Settings → Tokens](https://github.com/settings/tokens) 生�
 ## 开发
 
 ```bash
-git clone https://github.com/guo276689-star/skills-cli.git
+git clone https://github.com/guo276689-star/skill_cli.git
 cd skills-cli
 npm install
 npm run build

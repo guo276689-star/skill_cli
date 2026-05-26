@@ -1,0 +1,35 @@
+{
+  "name": "skills-cli",
+  "version": "0.1.0",
+  "description": "AI Agent Skills 包管理器 — 搜索/安装/管理 Reasonix Skills",
+  "main": "dist/index.js",
+  "bin": {
+    "skills": "dist/index.js"
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc && node dist/index.js",
+    "start": "node dist/index.js"
+  },
+  "keywords": ["reasonix", "skills", "ai-agent", "cli"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/guo276689-star/skills-cli"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "js-yaml": "^4.1.0",
+    "ora": "^8.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}

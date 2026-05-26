@@ -1,11 +1,11 @@
 # Skills CLI
 
-> AI Agent Skills 包管理器 — 像 npm 管理依赖一样管理你的 Skills。
+> AI Agent Skills 包管理器 — 搜索/安装/管理 Reasonix & Claude Code Skills
 
 ## 安装
 
 ```bash
-npm install -g @reasonix/skills-cli
+npm install -g github:guo276689-star/skills-cli
 ```
 
 ## 使用
@@ -15,7 +15,7 @@ npm install -g @reasonix/skills-cli
 skills search "code review"
 
 # 安装 Skill
-skills install addyosmani/agent-skills code-review-quality
+skills install addyosmani/agent-skills code-review-and-quality
 
 # 列出本地已安装
 skills list
@@ -24,18 +24,18 @@ skills list
 skills doctor
 
 # 移除 Skill
-skills remove code-review-quality
+skills remove code-review-and-quality
 ```
 
 ## 配置 GitHub Token
 
-`search` 和 `install` 命令需要 GitHub API。设置环境变量以提升限额：
+`search` 和 `install` 需要 GitHub API：
 
 ```bash
-export GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+export GITHUB_TOKEN=你的token
 ```
 
-Token 可在 [GitHub Settings → Developer settings → Personal access tokens](https://github.com/settings/tokens) 生成（无需任何 scope）。
+Token 在 [GitHub Settings → Tokens](https://github.com/settings/tokens) 生成，无需任何 scope。
 
 ## 目录约定
 
@@ -47,3 +47,12 @@ Token 可在 [GitHub Settings → Developer settings → Personal access tokens]
 ## 兼容性
 
 支持 Reasonix、Claude Code、Codex、Cursor 等所有使用 SKILL.md 格式的 AI Agent 平台。
+
+## 开发
+
+```bash
+git clone https://github.com/guo276689-star/skills-cli.git
+cd skills-cli
+npm install
+npm run build
+```

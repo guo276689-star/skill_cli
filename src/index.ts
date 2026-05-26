@@ -19,9 +19,10 @@ program
   .command('search <keyword>')
   .description('搜索 GitHub 上的 Skills')
   .option('-s, --min-stars <number>', '最小 star 数（如 100）', '0')
-  .action(async (keyword: string, options?: { minStars?: string }) => {
+  .option('-u, --updated-within <time>', '最近更新时间（如 30d, 2w, 3m, 1y）')
+  .action(async (keyword: string, options?: { minStars?: string; updatedWithin?: string }) => {
     const minStars = parseInt(options?.minStars ?? '0', 10) || 0;
-    await searchCommand(keyword, { minStars });
+    await searchCommand(keyword, { minStars, updatedWithin: options?.updatedWithin });
   });
 
 program

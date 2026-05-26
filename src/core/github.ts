@@ -12,6 +12,8 @@ interface GitHubRepoItem {
   description: string | null;
   topics: string[];
   html_url: string;
+  updated_at: string;
+  pushed_at: string;
 }
 
 interface GitHubRepoSearchResponse {
@@ -50,33 +52,81 @@ async function fetchWithTimeout(url: string, headers: Record<string, string>): P
   }
 }
 
+// ──── 时效性计算 ────
+
+/** 解析 "30d" / "2w" / "1m" / "2025-06" 为 ISO 日期 */
+function parseTimeFilter(input: string): string | null {
+  if (!input) return null;
+
+  // 纯日期格式：2025-06 或 2025-06-01
+  if (/^\d{4}-\d{2}(-\d{2})?$/.test(input)) {
+    return input.length === 7 ? `${input}-01` : input;
+  }
+
+  // 相对时间：30d / 2w / 1m / 1y
+  const match = input.match(/^(\d+)\s*(d|w|m|y)$/i);
+  if (!match) return null;
+
+  const num = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+  const now = new Date();
+
+  switch (unit) {
+    case 'd': now.setDate(now.getDate() - num); break;
+    case 'w': now.setDate(now.getDate() - num * 7); break;
+    case 'm': now.setMonth(now.getMonth() - num); break;
+    case 'y': now.setFullYear(now.getFullYear() - num); break;
+  }
+
+  return now.toISOString().slice(0, 10);
+}
+
+/** 计算新鲜度得分 (0-1)，越新分越高 */
+function freshnessScore(updatedAt: string): number {
+  const updated = new Date(updatedAt).getTime();
+  const now = Date.now();
+  const ageDays = (now - updated) / (1000 * 60 * 60 * 24);
+
+  if (ageDays <= 7) return 1.0;
+  if (ageDays <= 30) return 0.8;
+  if (ageDays <= 90) return 0.5;
+  if (ageDays <= 180) return 0.3;
+  if (ageDays <= 365) return 0.15;
+  return 0.05;
+}
+
 // ──── 搜索：两阶段策略 ────
 
 /**
- * Phase 1: Repository Search — 搜索包含 SKILL.md 的仓库，按 ⭐ 排序
+ * Phase 1: Repository Search
  */
 async function searchRepos(params: {
   keyword: string;
   minStars?: number;
+  updatedWithin?: string;
   page?: number;
 }): Promise<GitHubRepoItem[]> {
-  const { keyword, minStars = 0, page = 1 } = params;
+  const { keyword, minStars = 0, updatedWithin, page = 1 } = params;
 
-  // 构建查询：topic 优先 + 关键词 + 最小 stars
   const parts: string[] = [];
 
-  // 用 topic 过滤（skills 相关仓库通常带这些标签）
   if (keyword.length <= 3) {
-    // 短关键词用 topic
     parts.push('topic:agent-skills');
   }
 
   parts.push(keyword);
   parts.push('SKILL.md in:readme');
 
-  // stars 过滤
   if (minStars > 0) {
     parts.push(`stars:>=${minStars}`);
+  }
+
+  // 时效性过滤
+  if (updatedWithin) {
+    const since = parseTimeFilter(updatedWithin);
+    if (since) {
+      parts.push(`pushed:>=${since}`);
+    }
   }
 
   const q = encodeURIComponent(parts.join(' '));
@@ -86,8 +136,14 @@ async function searchRepos(params: {
   const res = await fetchWithTimeout(url, headers);
 
   if (!res.ok) {
-    // 降级：去掉 topic 和 in:readme 约束
-    const q2 = encodeURIComponent(`SKILL.md ${keyword}${minStars > 0 ? ` stars:>=${minStars}` : ''}`);
+    // 降级：宽松搜索
+    const fallback: string[] = [`SKILL.md ${keyword}`];
+    if (minStars > 0) fallback.push(`stars:>=${minStars}`);
+    if (updatedWithin) {
+      const since = parseTimeFilter(updatedWithin);
+      if (since) fallback.push(`pushed:>=${since}`);
+    }
+    const q2 = encodeURIComponent(fallback.join(' '));
     const url2 = `${GITHUB_API}/search/repositories?q=${q2}&sort=stars&order=desc&per_page=15`;
     const res2 = await fetchWithTimeout(url2, headers);
     if (!res2.ok) throw new Error(`GitHub API 错误: ${res2.status}`);
@@ -100,7 +156,7 @@ async function searchRepos(params: {
 }
 
 /**
- * Phase 2: 对指定仓库查找其中的 SKILL.md 文件
+ * Phase 2: 查找 repo 中的 SKILL.md 文件
  */
 async function findSkillFilesInRepo(repoFull: string): Promise<string[]> {
   const q = encodeURIComponent(`filename:SKILL.md repo:${repoFull}`);
@@ -110,7 +166,6 @@ async function findSkillFilesInRepo(repoFull: string): Promise<string[]> {
   try {
     const res = await fetchWithTimeout(url, headers);
     if (!res.ok) return [];
-
     const data = await res.json() as GitHubCodeSearchResponse;
     return (data.items ?? []).map(i => i.path);
   } catch {
@@ -122,6 +177,7 @@ async function findSkillFilesInRepo(repoFull: string): Promise<string[]> {
 
 export interface SearchOptions {
   minStars?: number;
+  updatedWithin?: string;
   page?: number;
 }
 
@@ -129,13 +185,11 @@ export async function searchSkills(
   keyword: string,
   options: SearchOptions = {},
 ): Promise<SearchResult[]> {
-  const { minStars = 0, page = 1 } = options;
+  const { minStars = 0, updatedWithin, page = 1 } = options;
 
-  // Phase 1: repo 搜索
-  const repos = await searchRepos({ keyword, minStars, page });
+  const repos = await searchRepos({ keyword, minStars, updatedWithin, page });
   if (repos.length === 0) return [];
 
-  // Phase 2: 并行查找每个仓库的 SKILL.md 文件
   const results: SearchResult[] = [];
 
   await Promise.all(
@@ -144,12 +198,12 @@ export async function searchSkills(
         const skillFiles = await findSkillFilesInRepo(repo.full_name);
 
         if (skillFiles.length === 0) {
-          // 没有找到确切文件，仍显示仓库作为候选
           results.push({
             repo: repo.full_name,
             repoStars: repo.stargazers_count,
             repoDesc: repo.description ?? '',
             repoUrl: repo.html_url,
+            updatedAt: repo.pushed_at || repo.updated_at,
             skillName: repo.full_name.split('/')[1],
             skillDesc: '',
             skillPath: '',
@@ -159,32 +213,36 @@ export async function searchSkills(
         }
 
         for (const skillPath of skillFiles) {
-          const skillName = extractSkillName(skillPath, repo.full_name);
           results.push({
             repo: repo.full_name,
             repoStars: repo.stargazers_count,
             repoDesc: repo.description ?? '',
             repoUrl: repo.html_url,
-            skillName,
+            updatedAt: repo.pushed_at || repo.updated_at,
+            skillName: extractSkillName(skillPath, repo.full_name),
             skillDesc: '',
             skillPath,
             downloadUrl: `https://raw.githubusercontent.com/${repo.full_name}/main/${skillPath}`,
           });
         }
       } catch {
-        // 跳过失败的 repo
+        // skip
       }
     }),
   );
 
-  // 按 stars 排序
-  results.sort((a, b) => b.repoStars - a.repoStars);
+  // 综合排名：stars 归一化 + 新鲜度
+  const maxStars = Math.max(1, ...results.map(r => r.repoStars));
+  results.forEach(r => {
+    (r as any)._score = (r.repoStars / maxStars) * 0.6 + freshnessScore(r.updatedAt) * 0.4;
+  });
+  results.sort((a, b) => (b as any)._score - (a as any)._score);
 
   return results;
 }
 
 /**
- * 搜索 + 获取 frontmatter 描述（只取 top 5 详细获取）
+ * 搜索 + 获取 frontmatter 描述
  */
 export async function searchSkillsWithMeta(
   keyword: string,
@@ -193,7 +251,7 @@ export async function searchSkillsWithMeta(
   const results = await searchSkills(keyword, options);
   if (results.length === 0) return [];
 
-  // 去重（同 repo 的多个 skill 合并展示）
+  // 去重
   const seen = new Set<string>();
   const deduped: SearchResult[] = [];
   for (const r of results) {
@@ -204,21 +262,24 @@ export async function searchSkillsWithMeta(
     }
   }
 
-  // 取 top 5 获取实际 frontmatter
+  // top 5 获取 frontmatter
   const top5 = deduped.filter(r => r.downloadUrl).slice(0, 5);
   const enriched = await Promise.all(
     top5.map(async (r) => {
       try {
         const content = await fetchSkillContent(r.downloadUrl);
         const fm = parseFrontmatterRaw(content);
-        return { ...r, skillDesc: fm.description ?? r.repoDesc, skillName: fm.name ?? r.skillName };
+        return {
+          ...r,
+          skillDesc: fm.description ?? r.repoDesc,
+          skillName: fm.name ?? r.skillName,
+        };
       } catch {
         return { ...r, skillDesc: r.repoDesc };
       }
     }),
   );
 
-  // 合并：enriched top5 + 剩余 deduped
   const rest = deduped.filter(
     r => !enriched.some(e => e.repo === r.repo && e.skillName === r.skillName),
   );

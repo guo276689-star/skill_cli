@@ -18,6 +18,7 @@ export interface SearchResult {
   repoStars: number;
   repoDesc: string;
   repoUrl: string;     // https://github.com/owner/repo
+  updatedAt: string;   // ISO 8601, "2026-05-26T..."
   skillName: string;
   skillDesc: string;
   skillPath: string;   // "skills/code-review-quality/SKILL.md"

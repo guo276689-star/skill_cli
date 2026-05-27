@@ -73,11 +73,11 @@ h2{font-size:20px;font-weight:600;margin-bottom:16px}
       <select id="search-time"><option value="">全部时间</option><option value="7d">7天</option><option value="30d">30天</option><option value="3m">3个月</option></select>
       <button onclick="doSearch()">搜索</button>
     </div>
-    <div id="search-results"><div class="empty"><div class="big">🔍</div><p>搜索 GitHub 上的 AI Agent Skills</p></div></div>
+    <div id="search-results"><div class="empty"><div class="big">🔍</div><p>在上方输入关键词搜索 GitHub 上的 AI Agent Skills</p></div></div>
   </div>
-  <div id="panel-mine" class="panel"><h2>📦 我的 Skills</h2><div id="mine-list"></div></div>
-  <div id="panel-quality" class="panel"><h2>📊 质量中心</h2><div id="quality-content"></div></div>
-  <div id="panel-env" class="panel"><h2>🖥️ 环境诊断</h2><div id="env-content"></div></div>
+  <div id="panel-mine" class="panel"><h2>📦 我的 Skills</h2><div id="mine-list"><div class="empty"><p>点击导航加载...</p></div></div></div>
+  <div id="panel-quality" class="panel"><h2>📊 质量中心</h2><div id="quality-content"><div class="empty"><p>点击导航加载...</p></div></div></div>
+  <div id="panel-env" class="panel"><h2>🖥️ 环境诊断</h2><div id="env-content"><div class="empty"><p>点击导航加载...</p></div></div></div>
 </div>
 <div id="diff-modal" class="modal-overlay" onclick="if(event.target===this)closeDiff()">
   <div class="modal"><h3 id="diff-title"></h3><pre id="diff-body"></pre>
@@ -88,90 +88,189 @@ h2{font-size:20px;font-weight:600;margin-bottom:16px}
   </div>
 </div>
 <script>
-let curSkill=null;
-const API=(p,o)=>fetch('/api/'+p+(o?'?'+new URLSearchParams(o):'')).then(r=>r.json());
+var curSkill=null;
 
-document.querySelectorAll('.nav').forEach(n=>n.addEventListener('click',()=>{
-  document.querySelectorAll('.nav').forEach(x=>x.classList.remove('active'));
-  n.classList.add('active');
-  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  const el=document.getElementById('panel-'+n.dataset.panel);
-  el.classList.add('active');
-  if(n.dataset.panel==='mine')loadMine();
-  if(n.dataset.panel==='quality')loadQuality();
-  if(n.dataset.panel==='env')loadEnv();
-}));
-
-async function doSearch(){
-  const kw=document.getElementById('search-input').value.trim();
-  if(!kw)return;
-  const r=document.getElementById('search-results');
-  r.innerHTML='<div id="loading">搜索中...</div>';
-  const stars=document.getElementById('search-stars').value;
-  const time=document.getElementById('search-time').value;
-  const res=await API('search',{q:kw,stars,time:time||undefined});
-  if(!res.ok){r.innerHTML=`<div class="empty"><p>${res.error}</p></div>`;return;}
-  if(!res.data.length){r.innerHTML='<div class="empty"><div class="big">🔍</div><p>未找到</p></div>';return;}
-  r.innerHTML=res.data.map(r=>`<div class="card"><div class="name">${s(r.skillName)}</div><div class="desc">${s(r.skillDesc||r.repoDesc||'')}</div><div class="meta"><span>${s(r.repo)}</span><span>⭐ ${r.repoStars>=1000?(r.repoStars/1000).toFixed(1)+'K':r.repoStars}</span><span>${ta(r.updatedAt)}</span></div>${r.downloadUrl?`<div class="actions"><button class="btn primary" onclick="doInstall('${a(r.repo)}','${a(r.skillName)}',this)">安装</button></div>`:''}</div>`).join('');
-}
-
-async function doInstall(repo,name,btn){
-  btn.textContent='安装中...';btn.disabled=true;
-  const res=await API('install',{repo,name});
-  if(res.ok){btn.textContent='✅';btn.className='btn';}
-  else{btn.textContent='❌';btn.className='btn danger';setTimeout(()=>{btn.textContent='安装';btn.className='btn primary';btn.disabled=false},2000);}
-}
-
-async function loadMine(){
-  const l=document.getElementById('mine-list');
-  l.innerHTML='<div id="loading">加载中...</div>';
-  const res=await API('list');
-  if(!res.ok||!res.data.length){l.innerHTML='<div class="empty"><div class="big">📭</div><p>还没有安装 Skill<br>去「发现」搜索并安装</p></div>';return;}
-  l.innerHTML=res.data.map(s=>`<div class="card"><div class="name">${s.runAs==='subagent'?'🧬':'📋'} ${s(s.name)}</div><div class="desc">${s(s.description||'')}</div><div class="meta"><span>${s(s.filePath)}</span></div><div class="actions"><button class="btn" onclick="viewDiff('${a(s.name)}')">对比远程</button><button class="btn warn" onclick="updateOne('${a(s.name)}')">更新</button><button class="btn danger" onclick="removeOne('${a(s.name)}')">删除</button></div></div>`).join('');
-}
-
-async function removeOne(name){if(!confirm('确定删除 '+name+'？'))return;await API('remove',{name});loadMine();}
-
-async function viewDiff(name){
-  curSkill=name;
-  const m=document.getElementById('diff-modal'),b=document.getElementById('diff-body'),t=document.getElementById('diff-title'),u=document.getElementById('diff-update-btn');
-  t.textContent='📄 '+name+' — 本地 vs 远程';b.innerHTML='加载中...';u.style.display='none';m.classList.add('show');
-  const res=await API('diff',{name});
-  if(!res.ok){b.innerHTML=res.error;return;}
-  if(res.data.same){b.innerHTML='✅ 已是最新版本';return;}
-  b.innerHTML=res.data.lines.map(l=>l.op==='add'?`<span class="diff-add">+ ${s(l.text)}</span>`:l.op==='del'?`<span class="diff-del">- ${s(l.text)}</span>`:l.op==='mod'?`<span class="diff-mod">~ ${s(l.text)}</span>`:`<span class="diff-same">  ${s(l.text)}</span>`).join('\n');
-  u.style.display='inline-block';
-}
-
-function closeDiff(){document.getElementById('diff-modal').classList.remove('show');curSkill=null;}
-async function doUpdateFromDiff(){if(!curSkill)return;const btn=document.getElementById('diff-update-btn');btn.textContent='更新中...';btn.disabled=true;const res=await API('update',{name:curSkill});if(res.ok){closeDiff();loadMine();}else{btn.textContent='❌';setTimeout(()=>{btn.textContent='确认更新';btn.disabled=false},2000);}}
-async function updateOne(name){curSkill=name;await viewDiff(name);}
-
-async function loadQuality(){
-  const el=document.getElementById('quality-content');
-  el.innerHTML='<div id="loading">分析中...</div>';
-  const res=await API('doctor');
-  if(!res.ok||!res.data||res.data.total===0){el.innerHTML='<div class="empty"><p>📭 没有 Skills</p></div>';return;}
-  const d=res.data;
-  let html=`<p style="color:#8b949e;margin-bottom:16px">${d.total} 个 Skills | ${d.scores.filter(s=>s.grade==='A').length} A · ${d.scores.filter(s=>s.grade==='B').length} B</p>`;
-  for(const s of d.scores){
-    const color=s.grade==='A'?'#238636':s.grade==='B'?'#58a6ff':s.grade==='C'?'#d29922':'#f85149';
-    html+=`<div class="card"><div class="name">${s(s.name)}</div><div class="score-bar" style="margin:8px 0"><span class="grade grade-${s.grade.toLowerCase()}">${s.grade}</span><div class="bar"><div style="width:${s.score}%;background:${color}"></div></div><span style="font-size:12px;color:#8b949e;width:36px;text-align:right">${s.score}</span></div><div style="display:flex;flex-wrap:wrap;gap:4px 16px;font-size:11px;color:#484f58;margin-top:6px">${s.breakdown.map(b=>`<span>${b.category}: ${b.points}/${b.max}</span>`).join('')}</div></div>`;
+// API 封装，统一错误处理
+async function api(path, params) {
+  try {
+    var url = '/api/' + path;
+    if (params) url += '?' + new URLSearchParams(params).toString();
+    var r = await fetch(url);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var d = await r.json();
+    if (!d.ok) throw new Error(d.error || '未知错误');
+    return d;
+  } catch (e) {
+    return { ok: false, error: e.message || '网络错误' };
   }
-  el.innerHTML=html;
 }
 
-async function loadEnv(){
-  const el=document.getElementById('env-content');
-  el.innerHTML='<div id="loading">检测中...</div>';
-  const res=await API('env');
-  if(!res.ok){el.innerHTML=`<div class="empty"><p>${res.error}</p></div>`;return;}
-  el.innerHTML='<div class="env-grid">'+res.data.map(c=>`<div class="env-item"><div class="icon">${c.status==='ok'?'✅':c.status==='warn'?'⚠️':'❌'}</div><div><div class="label">${c.label}</div><div class="val">${c.detail}</div></div></div>`).join('')+'</div>';
+// 导航
+document.querySelectorAll('.nav').forEach(function(n) {
+  n.addEventListener('click', function() {
+    document.querySelectorAll('.nav').forEach(function(x) { x.classList.remove('active'); });
+    n.classList.add('active');
+    document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+    var panelId = 'panel-' + n.dataset.panel;
+    document.getElementById(panelId).classList.add('active');
+
+    if (n.dataset.panel === 'mine') loadMine();
+    if (n.dataset.panel === 'quality') loadQuality();
+    if (n.dataset.panel === 'env') loadEnv();
+  });
+});
+
+// 搜索
+async function doSearch() {
+  var kw = document.getElementById('search-input').value.trim();
+  if (!kw) return;
+  var el = document.getElementById('search-results');
+  el.innerHTML = '<div id="loading">⏳ 搜索中...</div>';
+
+  var stars = document.getElementById('search-stars').value;
+  var time = document.getElementById('search-time').value;
+  var res = await api('search', { q: kw, stars: stars, time: time || undefined });
+
+  if (!res.ok) { el.innerHTML = '<div class="empty"><p>❌ ' + esc(res.error) + '</p></div>'; return; }
+  if (!res.data || !res.data.length) { el.innerHTML = '<div class="empty"><div class="big">🔍</div><p>未找到结果</p></div>'; return; }
+
+  el.innerHTML = res.data.map(function(r) {
+    return '<div class="card">' +
+      '<div class="name">' + esc(r.skillName) + '</div>' +
+      '<div class="desc">' + esc(r.skillDesc || r.repoDesc || '') + '</div>' +
+      '<div class="meta"><span>📦 ' + esc(r.repo) + '</span><span>⭐ ' + (r.repoStars >= 1000 ? (r.repoStars/1000).toFixed(1)+'K' : r.repoStars) + '</span><span>🕐 ' + timeAgo(r.updatedAt) + '</span></div>' +
+      (r.downloadUrl ? '<div class="actions"><button class="btn primary" onclick="doInstall(\'' + attr(r.repo) + '\',\'' + attr(r.skillName) + '\',this)">安装</button></div>' : '') +
+      '</div>';
+  }).join('');
 }
 
-function s(x){return(x||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');}
-function a(x){return(x||'').replace(/'/g,'\\x27').replace(/"/g,'&quot;');}
-function ta(iso){if(!iso)return'';const d=(Date.now()-new Date(iso).getTime())/(86400000);if(d<1)return'今天';if(d<7)return Math.floor(d)+'天前';if(d<30)return Math.floor(d/7)+'周前';if(d<365)return Math.floor(d/30)+'月前';return Math.floor(d/365)+'年前';}
+async function doInstall(repo, name, btn) {
+  btn.textContent = '安装中...'; btn.disabled = true;
+  var res = await api('install', { repo: repo, name: name });
+  if (res.ok) { btn.textContent = '✅'; btn.className = 'btn'; }
+  else { btn.textContent = '❌ ' + (res.error||''); btn.className = 'btn danger'; setTimeout(function() { btn.textContent = '安装'; btn.className = 'btn primary'; btn.disabled = false; }, 2000); }
+}
+
+// 我的 Skills
+async function loadMine() {
+  var el = document.getElementById('mine-list');
+  el.innerHTML = '<div id="loading">⏳ 加载中...</div>';
+
+  var res = await api('list');
+  if (!res.ok) { el.innerHTML = '<div class="empty"><p>❌ ' + esc(res.error) + '</p></div>'; return; }
+  if (!res.data || !res.data.length) { el.innerHTML = '<div class="empty"><div class="big">📭</div><p>还没有安装任何 Skill<br>去「发现」面板搜索并安装</p></div>'; return; }
+
+  el.innerHTML = res.data.map(function(s) {
+    return '<div class="card">' +
+      '<div class="name">' + (s.runAs === 'subagent' ? '🧬' : '📋') + ' ' + esc(s.name) + '</div>' +
+      '<div class="desc">' + esc(s.description || '') + '</div>' +
+      '<div class="meta"><span>' + esc(s.filePath) + '</span></div>' +
+      '<div class="actions">' +
+        '<button class="btn" onclick="viewDiff(\'' + attr(s.name) + '\')">对比远程</button>' +
+        '<button class="btn warn" onclick="updateOne(\'' + attr(s.name) + '\')">更新</button>' +
+        '<button class="btn danger" onclick="removeOne(\'' + attr(s.name) + '\')">删除</button>' +
+      '</div></div>';
+  }).join('');
+}
+
+async function removeOne(name) {
+  if (!confirm('确定删除 ' + name + '？')) return;
+  await api('remove', { name: name });
+  loadMine();
+}
+
+// Diff & Update
+async function viewDiff(name) {
+  curSkill = name;
+  var m = document.getElementById('diff-modal');
+  var b = document.getElementById('diff-body');
+  var t = document.getElementById('diff-title');
+  var u = document.getElementById('diff-update-btn');
+  t.textContent = '📄 ' + name + ' — 本地 vs 远程';
+  b.textContent = '⏳ 加载中...';
+  u.style.display = 'none';
+  m.classList.add('show');
+
+  var res = await api('diff', { name: name });
+  if (!res.ok) { b.textContent = '❌ ' + (res.error || ''); return; }
+  if (res.data.same) { b.textContent = '✅ 已是最新版本，无需更新'; return; }
+
+  b.innerHTML = res.data.lines.map(function(l) {
+    if (l.op === 'add') return '<span class="diff-add">+ ' + esc(l.text) + '</span>';
+    if (l.op === 'del') return '<span class="diff-del">- ' + esc(l.text) + '</span>';
+    if (l.op === 'mod') return '<span class="diff-mod">~ ' + esc(l.text) + '</span>';
+    return '<span class="diff-same">  ' + esc(l.text) + '</span>';
+  }).join('\n');
+  u.style.display = 'inline-block';
+}
+
+function closeDiff() { document.getElementById('diff-modal').classList.remove('show'); curSkill = null; }
+
+async function doUpdateFromDiff() {
+  if (!curSkill) return;
+  var btn = document.getElementById('diff-update-btn');
+  btn.textContent = '更新中...'; btn.disabled = true;
+  var res = await api('update', { name: curSkill });
+  if (res.ok) { closeDiff(); loadMine(); }
+  else { btn.textContent = '❌ ' + (res.error||''); setTimeout(function() { btn.textContent = '确认更新'; btn.disabled = false; }, 2000); }
+}
+
+async function updateOne(name) { curSkill = name; await viewDiff(name); }
+
+// 质量中心
+async function loadQuality() {
+  var el = document.getElementById('quality-content');
+  el.innerHTML = '<div id="loading">⏳ 分析中...</div>';
+
+  var res = await api('doctor');
+  if (!res.ok) { el.innerHTML = '<div class="empty"><p>❌ ' + esc(res.error) + '</p></div>'; return; }
+  var d = res.data;
+  if (!d || d.total === 0) { el.innerHTML = '<div class="empty"><p>📭 没有 Skills 可分析</p></div>'; return; }
+
+  var aCount = 0, bCount = 0;
+  var cards = d.scores.map(function(s) {
+    if (s.grade === 'A') aCount++; else if (s.grade === 'B') bCount++;
+    var color = s.grade === 'A' ? '#238636' : s.grade === 'B' ? '#58a6ff' : s.grade === 'C' ? '#d29922' : '#f85149';
+    return '<div class="card">' +
+      '<div class="name">' + esc(s.name) + '</div>' +
+      '<div class="score-bar" style="margin:8px 0">' +
+        '<span class="grade grade-' + s.grade.toLowerCase() + '">' + s.grade + '</span>' +
+        '<div class="bar"><div style="width:' + s.score + '%;background:' + color + '"></div></div>' +
+        '<span style="font-size:12px;color:#8b949e;width:36px;text-align:right">' + s.score + '</span>' +
+      '</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:4px 16px;font-size:11px;color:#484f58;margin-top:6px">' +
+        s.breakdown.map(function(b) { return '<span>' + b.category + ': ' + b.points + '/' + b.max + '</span>'; }).join('') +
+      '</div></div>';
+  }).join('');
+
+  el.innerHTML = '<p style="color:#8b949e;margin-bottom:16px">' + d.total + ' 个 Skills | ' + aCount + ' A · ' + bCount + ' B</p>' + cards;
+}
+
+// 环境诊断
+async function loadEnv() {
+  var el = document.getElementById('env-content');
+  el.innerHTML = '<div id="loading">⏳ 检测中...</div>';
+
+  var res = await api('env');
+  if (!res.ok) { el.innerHTML = '<div class="empty"><p>❌ ' + esc(res.error) + '</p></div>'; return; }
+
+  el.innerHTML = '<div class="env-grid">' + res.data.map(function(c) {
+    return '<div class="env-item"><div class="icon">' + (c.status === 'ok' ? '✅' : c.status === 'warn' ? '⚠️' : '❌') + '</div><div><div class="label">' + esc(c.label) + '</div><div class="val">' + esc(c.detail) + '</div></div></div>';
+  }).join('') + '</div>';
+}
+
+// 工具函数
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function attr(s) { return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function timeAgo(iso) {
+  if (!iso) return '';
+  var days = (Date.now() - new Date(iso).getTime()) / 86400000;
+  if (days < 1) return '今天';
+  if (days < 7) return Math.floor(days) + '天前';
+  if (days < 30) return Math.floor(days/7) + '周前';
+  if (days < 365) return Math.floor(days/30) + '月前';
+  return Math.floor(days/365) + '年前';
+}
 </script>
 </body>
 </html>

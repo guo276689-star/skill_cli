@@ -74,8 +74,8 @@ const DANGEROUS_PATTERNS = [
     { pattern: /\bwget\b.*\|.*\b(?:ba)?sh\b/, label: 'wget | sh 模式', severity: 'error' },
 ];
 // ──── 公共遍历 ────
-function walkSkillFiles(fn) {
-    const dirs = (0, installer_1.getSkillsDirs)();
+function walkSkillFiles(fn, all = false) {
+    const dirs = (0, installer_1.getSkillsDirs)(all);
     for (const dir of dirs) {
         if (!fs.existsSync(dir))
             continue;

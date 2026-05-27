@@ -53,11 +53,53 @@ const SKILLS_DIRS = [
 ];
 /** 缓存的已存在 Skills 目录 */
 let _cachedDirs = null;
-function getSkillsDirs() {
-    if (_cachedDirs)
+function getSkillsDirs(all = false) {
+    if (!all) {
+        if (_cachedDirs)
+            return _cachedDirs;
+        _cachedDirs = SKILLS_DIRS.filter(d => fs.existsSync(d));
         return _cachedDirs;
-    _cachedDirs = SKILLS_DIRS.filter(d => fs.existsSync(d));
-    return _cachedDirs;
+    }
+    // --all 模式：扫描全局 + 所有已知项目
+    const dirs = new Set();
+    // 全局
+    if (fs.existsSync(SKILLS_DIRS[0]))
+        dirs.add(SKILLS_DIRS[0]);
+    // 当前项目
+    if (fs.existsSync(SKILLS_DIRS[1]))
+        dirs.add(SKILLS_DIRS[1]);
+    // 从 config.json 读取其他项目
+    const configPath = path.join(os.homedir(), '.reasonix', 'config.json');
+    try {
+        if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+            if (config.projects) {
+                for (const projectPath of Object.keys(config.projects)) {
+                    const skillsDir = path.join(projectPath, '.reasonix', 'skills');
+                    if (fs.existsSync(skillsDir))
+                        dirs.add(skillsDir);
+                }
+            }
+        }
+    }
+    catch { /* config 解析失败则跳过 */ }
+    // 扫描 ~/.reasonix/skills/ 中的子目录（目录式 Skill）
+    const globalSkillsDir = SKILLS_DIRS[0];
+    try {
+        if (fs.existsSync(globalSkillsDir)) {
+            const entries = fs.readdirSync(globalSkillsDir, { withFileTypes: true });
+            for (const e of entries) {
+                if (e.isDirectory()) {
+                    const subDir = path.join(globalSkillsDir, e.name);
+                    if (fs.existsSync(path.join(subDir, 'SKILL.md'))) {
+                        dirs.add(globalSkillsDir); // 已在列表中
+                    }
+                }
+            }
+        }
+    }
+    catch { /* skip */ }
+    return [...dirs];
 }
 /** 清除缓存（目录变化后调用） */
 function clearDirsCache() {

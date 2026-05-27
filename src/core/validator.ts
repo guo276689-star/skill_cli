@@ -41,8 +41,8 @@ const DANGEROUS_PATTERNS: { pattern: RegExp; label: string; severity: 'error' | 
 
 // ──── 公共遍历 ────
 
-export function walkSkillFiles(fn: (filePath: string) => void): void {
-  const dirs = getSkillsDirs();
+export function walkSkillFiles(fn: (filePath: string) => void, all = false): void {
+  const dirs = getSkillsDirs(all);
   for (const dir of dirs) {
     if (!fs.existsSync(dir)) continue;
     const entries = fs.readdirSync(dir);

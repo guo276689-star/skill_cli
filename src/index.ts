@@ -47,8 +47,9 @@ program
   .command('list')
   .alias('ls')
   .description('列出本地已安装的 Skills')
-  .action(async () => {
-    await listCommand();
+  .option('-a, --all', '扫描所有项目中的 Skills（全局 + 所有已知项目）')
+  .action(async (options?: { all?: boolean }) => {
+    await listCommand({ all: options?.all });
   });
 
 program

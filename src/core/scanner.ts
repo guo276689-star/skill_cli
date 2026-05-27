@@ -6,7 +6,7 @@ import { walkSkillFiles } from './validator';
 /**
  * 扫描本地所有 Skills 目录，返回已安装的 Skills 列表
  */
-export function scanLocalSkills(): SkillMeta[] {
+export function scanLocalSkills(all = false): SkillMeta[] {
   const skills: SkillMeta[] = [];
   walkSkillFiles((filePath) => {
     try {
@@ -15,7 +15,7 @@ export function scanLocalSkills(): SkillMeta[] {
     } catch {
       // 解析失败的文件跳过，不阻塞其他 Skill 扫描
     }
-  });
+  }, all);
   return skills;
 }
 

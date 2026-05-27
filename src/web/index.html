@@ -158,9 +158,13 @@ async function loadMine() {
 
   var res = await api('list');
   if (!res.ok) { el.innerHTML = '<div class="empty"><p>❌ ' + esc(res.error) + '</p></div>'; return; }
-  if (!res.data || !res.data.length) { el.innerHTML = '<div class="empty"><div class="big">📭</div><p>还没有安装任何 Skill<br>去「发现」面板搜索并安装</p></div>'; return; }
+  if (!res.data || !res.data.length) {
+    var dirs = res.meta ? res.meta.dirs.join(', ') : '';
+    el.innerHTML = '<div class="empty"><div class="big">📭</div><p>还没有安装任何 Skill</p><p style="font-size:11px;color:#484f58;margin-top:8px">扫描目录: ' + esc(dirs || '无') + '</p><p style="font-size:11px;color:#484f58">工作目录: ' + esc(res.meta?res.meta.cwd:'') + '</p></div>';
+    return;
+  }
 
-  el.innerHTML = res.data.map(function(s) {
+  el.innerHTML = '<p style="color:#484f58;font-size:11px;margin-bottom:12px">📂 ' + esc(res.meta?res.meta.cwd:'') + ' | 扫描: ' + esc((res.meta?res.meta.dirs:[]).map(function(d){return d.replace(/\\\\/g,'/').split('/').pop();}).join(', ')) + '</p>' + res.data.map(function(s) {
     return '<div class="card">' +
       '<div class="name">' + (s.runAs === 'subagent' ? '🧬' : '📋') + ' ' + esc(s.name) + '</div>' +
       '<div class="desc">' + esc(s.description || '') + '</div>' +

@@ -52,8 +52,9 @@ export async function serveCommand(): Promise<void> {
       }
 
       if (url.pathname === '/api/list') {
+        const all = url.searchParams.get('all') === '1';
         const data = scanLocalSkills();
-        json(res, { ok: true, data });
+        json(res, { ok: true, data, meta: { cwd: process.cwd(), dirs: getSkillsDirs() } });
         return;
       }
 

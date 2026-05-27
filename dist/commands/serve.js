@@ -88,8 +88,9 @@ async function serveCommand() {
                 return;
             }
             if (url.pathname === '/api/list') {
+                const all = url.searchParams.get('all') === '1';
                 const data = (0, scanner_1.scanLocalSkills)();
-                json(res, { ok: true, data });
+                json(res, { ok: true, data, meta: { cwd: process.cwd(), dirs: (0, installer_1.getSkillsDirs)() } });
                 return;
             }
             if (url.pathname === '/api/install') {

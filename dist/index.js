@@ -17,6 +17,7 @@ const new_1 = require("./commands/new");
 const review_1 = require("./commands/review");
 const update_1 = require("./commands/update");
 const diff_1 = require("./commands/diff");
+const serve_1 = require("./commands/serve");
 const program = new commander_1.Command();
 program
     .name('skills')
@@ -104,6 +105,13 @@ program
     await (0, update_1.updateCommand)(name);
 });
 program
+    .command('serve')
+    .alias('ui')
+    .description('启动图形化界面（浏览器打开）')
+    .action(async () => {
+    await (0, serve_1.serveCommand)();
+});
+program
     .command('remove <name>')
     .alias('rm')
     .description('移除已安装的 Skill')
@@ -124,6 +132,7 @@ if (process.argv.length <= 2) {
     console.log(`  ${chalk_1.default.cyan('info [name]')}           查看 Skill 详细信息`);
     console.log(`  ${chalk_1.default.cyan('review <name>')}         AI 评审 Skill 能力`);
     console.log(`  ${chalk_1.default.cyan('doctor [name]')}         健康检查（--deep 深度）`);
+    console.log(`  ${chalk_1.default.cyan('serve')}                 启动图形化界面 🆕`);
     console.log(`  ${chalk_1.default.cyan('remove <name>')}          移除 Skill`);
     console.log();
     console.log(chalk_1.default.dim('示例:'));

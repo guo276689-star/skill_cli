@@ -12,6 +12,7 @@ import { newCommand } from './commands/new';
 import { reviewCommand } from './commands/review';
 import { updateCommand } from './commands/update';
 import { diffCommand } from './commands/diff';
+import { serveCommand } from './commands/serve';
 
 const program = new Command();
 
@@ -112,6 +113,14 @@ program
   });
 
 program
+  .command('serve')
+  .alias('ui')
+  .description('启动图形化界面（浏览器打开）')
+  .action(async () => {
+    await serveCommand();
+  });
+
+program
   .command('remove <name>')
   .alias('rm')
   .description('移除已安装的 Skill')
@@ -133,6 +142,7 @@ if (process.argv.length <= 2) {
   console.log(`  ${chalk.cyan('info [name]')}           查看 Skill 详细信息`);
   console.log(`  ${chalk.cyan('review <name>')}         AI 评审 Skill 能力`);
   console.log(`  ${chalk.cyan('doctor [name]')}         健康检查（--deep 深度）`);
+  console.log(`  ${chalk.cyan('serve')}                 启动图形化界面 🆕`);
   console.log(`  ${chalk.cyan('remove <name>')}          移除 Skill`);
   console.log();
   console.log(chalk.dim('示例:'));

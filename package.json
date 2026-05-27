@@ -2,17 +2,15 @@
   "name": "skills-cli",
   "version": "0.1.0",
   "description": "AI Agent Skills 包管理器 — 搜索/安装/管理 Reasonix Skills",
-  "main": "electron/main.js",
+  "main": "dist/index.js",
   "bin": {
     "skills": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc && node dist/index.js",
-    "start": "tsc && electron .",
-    "app": "electron ."
+    "dev": "tsc && node dist/index.js"
   },
-  "keywords": ["reasonix", "skills", "ai-agent", "cli", "electron"],
+  "keywords": ["reasonix", "skills", "ai-agent", "cli"],
   "repository": {
     "type": "git",
     "url": "https://github.com/guo276689-star/skill_cli"
@@ -27,7 +25,6 @@
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
-    "electron": "^31.0.0",
     "typescript": "^5.5.0"
   }
 }

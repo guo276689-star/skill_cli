@@ -36,7 +36,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.scanLocalSkills = scanLocalSkills;
 exports.findSkillByName = findSkillByName;
 const fs = __importStar(require("fs"));
-const path = __importStar(require("path"));
 const yaml = __importStar(require("js-yaml"));
 const validator_1 = require("./validator");
 /**
@@ -56,14 +55,8 @@ function scanLocalSkills() {
     });
     return skills;
 }
-/**
- * 解析单个 SKILL.md 文件。
- * existingStat 可选：调用方如已执行 statSync 可传入以消除重复系统调用。
- */
-function parseSkillFile(filePath, existingStat) {
+function parseSkillFile(filePath) {
     const content = fs.readFileSync(filePath, 'utf-8');
-    const stat = existingStat ?? fs.statSync(filePath);
-    // 提取 frontmatter
     const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
     if (!fmMatch)
         return null;
@@ -78,40 +71,33 @@ function parseSkillFile(filePath, existingStat) {
         allowedTools: Array.isArray(fm.allowedTools) ? fm.allowedTools.map(String) : undefined,
         maxIters: typeof fm.maxIters === 'number' ? fm.maxIters : undefined,
         filePath,
-        size: stat.size,
+        size: fs.statSync(filePath).size,
     };
 }
-/**
- * 根据名称查找 Skill（按目录顺序匹配文件名前缀，命中即停止）
- */
+/** 缓存：name → SkillMeta，避免多轮 I/O */
+let _nameCache = null;
+function ensureCache() {
+    if (_nameCache)
+        return _nameCache;
+    _nameCache = new Map();
+    (0, validator_1.walkSkillFiles)((filePath) => {
+        try {
+            const meta = parseSkillFile(filePath);
+            if (meta) {
+                _nameCache.set(meta.name, meta);
+                // 也注册文件名别名
+                const baseName = filePath.replace(/\\/g, '/').split('/').pop()?.replace(/\.md$/, '');
+                if (baseName && baseName !== meta.name) {
+                    _nameCache.set(baseName, meta);
+                }
+            }
+        }
+        catch { /* skip */ }
+    });
+    return _nameCache;
+}
+/** 根据名称查找 Skill（O(1) 缓存查找） */
 function findSkillByName(name) {
-    // 优先按文件名快速匹配，避免解析所有文件的 YAML
-    let found = null;
-    (0, validator_1.walkSkillFiles)((filePath) => {
-        if (found)
-            return; // 已找到，跳过后续
-        // 快速文件名匹配
-        const baseName = path.basename(filePath, '.md');
-        if (baseName === name) {
-            found = parseSkillFile(filePath);
-            return;
-        }
-        // 目录模式：父目录名匹配
-        const parentDir = path.basename(path.dirname(filePath));
-        if (parentDir === name) {
-            found = parseSkillFile(filePath);
-        }
-    });
-    if (found)
-        return found;
-    // 回退：逐个解析 frontmatter 中的 name 字段
-    (0, validator_1.walkSkillFiles)((filePath) => {
-        if (found)
-            return;
-        const meta = parseSkillFile(filePath);
-        if (meta && meta.name === name)
-            found = meta;
-    });
-    return found;
+    return ensureCache().get(name) ?? null;
 }
 //# sourceMappingURL=scanner.js.map

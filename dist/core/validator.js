@@ -44,9 +44,7 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const yaml = __importStar(require("js-yaml"));
 const installer_1 = require("./installer");
-const scanner_1 = require("./scanner");
-// ──── 工具名映射表 ────
-/** Reasonix 有效的工具名列表 */
+// ──── 常量 ────
 const REASONIX_TOOLS = [
     'read_file', 'write_file', 'edit_file', 'multi_edit',
     'search_content', 'search_files', 'glob', 'run_command',
@@ -64,13 +62,12 @@ const CURSOR_TOOLS = [
     'read_file', 'search_content', 'search_files', 'list_directory',
     'run_terminal_cmd', 'edit_file', 'write_file', 'delete_file',
 ];
-/** 危险 pattern 列表 */
 const DANGEROUS_PATTERNS = [
     { pattern: /\b(exec|spawn|execSync|spawnSync)\s*\(/, label: '命令执行', severity: 'error' },
     { pattern: /\beval\s*\(/, label: 'eval 调用', severity: 'error' },
     { pattern: /\bnew\s+Function\s*\(/, label: 'Function 构造器', severity: 'error' },
     { pattern: /\brm\s+-rf\b/, label: 'rm -rf 危险删除', severity: 'error' },
-    { pattern: /\bfs\.(unlink|rmdir|rm)Sync?\s*\(/, label: '文件删除', severity: 'warning' },
+    { pattern: /\bfs\.(unlink|rmdir|rm|rmSync)\s*\(/, label: '文件删除', severity: 'warning' },
     { pattern: /\bfs\.(writeFile|appendFile)Sync?\s*\(/, label: '任意文件写入', severity: 'warning' },
     { pattern: /\bprocess\.env\b/, label: '环境变量读取', severity: 'warning' },
     { pattern: /\bcurl\b.*\|.*\b(?:ba)?sh\b/, label: 'curl | sh 模式', severity: 'error' },
@@ -97,11 +94,38 @@ function walkSkillFiles(fn) {
         }
     }
 }
+/** 一次遍历完成检查+评分+去重 */
 function doctorProCheck() {
-    const base = doctorCheck();
-    const scores = computeAllScores();
-    const duplicates = detectDuplicates();
-    return { ...base, scores, duplicates };
+    const issuesAccum = [];
+    const scores = [];
+    const nameMap = new Map(); // lowerName → originalName
+    let total = 0;
+    let ok = 0;
+    walkSkillFiles((filePath) => {
+        total++;
+        // 读取一次，所有检查复用
+        let content;
+        try {
+            content = fs.readFileSync(filePath, 'utf-8');
+        }
+        catch {
+            issuesAccum.push({ filePath, severity: 'error', message: '无法读取文件' });
+            return;
+        }
+        // 格式检查
+        const fileIssues = checkFileWithContent(filePath, content);
+        if (fileIssues.length === 0)
+            ok++;
+        issuesAccum.push(...fileIssues);
+        // 质量评分（复用已读内容）
+        const score = computeScoreFromContent(filePath, content);
+        if (score) {
+            scores.push(score);
+            nameMap.set(score.name.toLowerCase(), score.name);
+        }
+    });
+    const duplicates = detectDuplicatesFromScores(scores);
+    return { total, ok, issues: issuesAccum, scores, duplicates };
 }
 // ──── 基础 doctor ────
 function doctorCheck() {
@@ -110,27 +134,29 @@ function doctorCheck() {
     let ok = 0;
     walkSkillFiles((filePath) => {
         total++;
-        const fileIssues = checkFile(filePath);
-        if (fileIssues.length === 0)
+        let content;
+        try {
+            content = fs.readFileSync(filePath, 'utf-8');
+        }
+        catch {
+            issuesAccum.push({ filePath, severity: 'error', message: '无法读取文件' });
+            return;
+        }
+        const issues = checkFileWithContent(filePath, content);
+        if (issues.length === 0)
             ok++;
-        issuesAccum.push(...fileIssues);
+        issuesAccum.push(...issues);
     });
     return { total, ok, issues: issuesAccum };
 }
-function checkFile(filePath) {
-    let content;
-    try {
-        content = fs.readFileSync(filePath, 'utf-8');
-    }
-    catch {
-        return [{ filePath, severity: 'error', message: '无法读取文件' }];
-    }
+// ──── 格式检查（统一入口） ────
+function checkFileWithContent(filePath, content) {
     const issues = checkFrontmatterSyntax(filePath, content);
     if (issues.length > 0)
         return issues;
-    const fm = parseFrontmatter(filePath, content);
+    const fm = parseFrontmatter(content);
     if (!fm)
-        return [];
+        return [{ filePath, severity: 'error', message: 'frontmatter 解析失败' }];
     issues.push(...checkRequiredFields(filePath, fm));
     issues.push(...checkOptionalFields(filePath, fm));
     const fmEnd = content.indexOf('\n---', 3);
@@ -140,13 +166,12 @@ function checkFile(filePath) {
     return issues;
 }
 function checkFrontmatterSyntax(filePath, content) {
-    const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-    if (!fmMatch) {
+    if (!content.match(/^---\n([\s\S]*?)\n---/)) {
         return [{ filePath, severity: 'error', message: '缺少 YAML frontmatter (--- ... ---)' }];
     }
     return [];
 }
-function parseFrontmatter(_filePath, content) {
+function parseFrontmatter(content) {
     const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
     if (!fmMatch)
         return null;
@@ -163,11 +188,7 @@ function checkRequiredFields(filePath, fm) {
         issues.push({ filePath, severity: 'error', message: '缺少必填字段: name' });
     }
     else if (typeof fm.name === 'string' && !/^[a-zA-Z0-9_\-.]{1,64}$/.test(fm.name)) {
-        issues.push({
-            filePath,
-            severity: 'error',
-            message: `name 格式非法: "${fm.name}"（允许字母/数字/_/-/.，1-64字符）`,
-        });
+        issues.push({ filePath, severity: 'error', message: `name 格式非法: "${fm.name}"` });
     }
     if (!fm.description) {
         issues.push({ filePath, severity: 'warning', message: '建议填写 description 字段' });
@@ -177,27 +198,13 @@ function checkRequiredFields(filePath, fm) {
 function checkOptionalFields(filePath, fm) {
     const issues = [];
     if (fm.runAs && !['inline', 'subagent'].includes(fm.runAs)) {
-        issues.push({
-            filePath,
-            severity: 'error',
-            message: `runAs 值非法: "${fm.runAs}"（只允许 inline 或 subagent）`,
-        });
+        issues.push({ filePath, severity: 'error', message: `runAs 值非法: "${fm.runAs}"` });
     }
     if (fm.model && typeof fm.model === 'string' && !fm.model.startsWith('deepseek-')) {
-        issues.push({
-            filePath,
-            severity: 'warning',
-            message: `model 应为 deepseek-* 系列: "${fm.model}" 在 Reasonix 中不生效`,
-        });
+        issues.push({ filePath, severity: 'warning', message: `model 应为 deepseek-* 系列: "${fm.model}" 在 Reasonix 中不生效` });
     }
-    if (fm.maxIters !== undefined) {
-        if (!Number.isInteger(fm.maxIters) || fm.maxIters < 1 || fm.maxIters > 32) {
-            issues.push({
-                filePath,
-                severity: 'error',
-                message: `maxIters 应在 1-32 之间: ${fm.maxIters}`,
-            });
-        }
+    if (fm.maxIters !== undefined && (!Number.isInteger(fm.maxIters) || fm.maxIters < 1 || fm.maxIters > 32)) {
+        issues.push({ filePath, severity: 'error', message: `maxIters 应在 1-32 之间: ${fm.maxIters}` });
     }
     if (fm.allowedTools) {
         if (!Array.isArray(fm.allowedTools)) {
@@ -206,11 +213,7 @@ function checkOptionalFields(filePath, fm) {
         else {
             for (const tool of fm.allowedTools) {
                 if (!REASONIX_TOOLS.includes(tool)) {
-                    issues.push({
-                        filePath,
-                        severity: 'warning',
-                        message: `allowedTools 中 "${tool}" 不是有效的 Reasonix 工具名`,
-                    });
+                    issues.push({ filePath, severity: 'warning', message: `allowedTools 中 "${tool}" 不是有效的 Reasonix 工具名` });
                 }
             }
         }
@@ -227,6 +230,11 @@ function computeScore(filePath, content) {
     } })();
     if (!raw)
         return null;
+    return computeScoreFromContent(filePath, raw);
+}
+function computeScoreFromContent(filePath, raw) {
+    if (!raw)
+        return null;
     const fmMatch = raw.match(/^---\n([\s\S]*?)\n---/);
     const fm = fmMatch ? (() => { try {
         return yaml.load(fmMatch[1]);
@@ -238,14 +246,14 @@ function computeScore(filePath, content) {
     const name = fm?.name ?? path.basename(filePath, '.md');
     const breakdown = [];
     let score = 0;
-    // 1. frontmatter 完整性 (30)
+    // frontmatter 完整性 (30)
     if (fmMatch) {
         score += 10;
         breakdown.push({ category: 'frontmatter 存在', points: 10, max: 10 });
     }
     else {
         breakdown.push({ category: 'frontmatter 存在', points: 0, max: 10 });
-        return { name, filePath, score: 0, grade: 'F', breakdown };
+        return { name, filePath, score: 0, grade: 'F', breakdown, body };
     }
     if (fm?.name) {
         score += 8;
@@ -265,7 +273,7 @@ function computeScore(filePath, content) {
     }
     else
         breakdown.push({ category: 'runAs 字段', points: 0, max: 5 });
-    // 2. body 质量 (30)
+    // body 质量 (30)
     const bodyLines = body.split('\n').filter(l => l.trim());
     if (bodyLines.length >= 5) {
         score += 10;
@@ -289,7 +297,7 @@ function computeScore(filePath, content) {
     }
     else
         breakdown.push({ category: '有检查清单', points: 0, max: 10 });
-    // 3. 配置质量 (15)
+    // 配置质量 (15)
     if (fm?.model && typeof fm.model === 'string' && fm.model.startsWith('deepseek-')) {
         score += 5;
         breakdown.push({ category: 'model 配置', points: 5, max: 5 });
@@ -308,22 +316,14 @@ function computeScore(filePath, content) {
         score += 5;
         breakdown.push({ category: 'allowedTools 配置 (全部可用)', points: 5, max: 10 });
     }
-    // 4. 安全性 (25) — 从满分倒扣
+    // 安全性 (25)
     const secResult = scanSecurity(body);
-    const secPenalty = secResult.filter(s => s.severity === 'error').length * 8
-        + secResult.filter(s => s.severity === 'warning').length * 4;
+    const secPenalty = secResult.filter(s => s.severity === 'error').length * 8 + secResult.filter(s => s.severity === 'warning').length * 4;
     const secScore = Math.max(0, 25 - secPenalty);
     score += secScore;
     breakdown.push({ category: '安全性', points: secScore, max: 25 });
     const grade = score >= 90 ? 'A' : score >= 70 ? 'B' : score >= 50 ? 'C' : score >= 30 ? 'D' : 'F';
-    return { name, filePath, score, grade, breakdown };
-}
-function computeAllScores() {
-    const skills = (0, scanner_1.scanLocalSkills)();
-    return skills
-        .map(s => computeScore(s.filePath))
-        .filter((s) => s !== null)
-        .sort((a, b) => b.score - a.score);
+    return { name, filePath, score, grade, breakdown, body };
 }
 function scanSecurity(body) {
     return DANGEROUS_PATTERNS
@@ -338,73 +338,32 @@ function checkCompatibility(tools) {
     };
 }
 function matchTools(tools, valid) {
+    const validSet = new Set(valid);
     const ok = [];
     const bad = [];
     for (const t of tools) {
-        (valid.includes(t) ? ok : bad).push(t);
+        (validSet.has(t) ? ok : bad).push(t);
     }
     return { ok: ok.length, bad };
 }
-// ──── 去重 ────
-function detectDuplicates() {
-    const skills = (0, scanner_1.scanLocalSkills)();
-    const groups = [];
-    for (let i = 0; i < skills.length; i++) {
-        for (let j = i + 1; j < skills.length; j++) {
-            const a = skills[i];
-            const b = skills[j];
-            // 相同名称，或描述前 30 字雷同
-            const sameName = a.name.toLowerCase() === b.name.toLowerCase();
-            const descA = (a.description || '').slice(0, 30).toLowerCase();
-            const descB = (b.description || '').slice(0, 30).toLowerCase();
-            const similarDesc = descA && descB && descA === descB;
-            if (sameName || similarDesc) {
-                // 查找已有组
-                let added = false;
-                for (const g of groups) {
-                    if (g.includes(a.name) || g.includes(b.name)) {
-                        if (!g.includes(a.name))
-                            g.push(a.name);
-                        if (!g.includes(b.name))
-                            g.push(b.name);
-                        added = true;
-                        break;
-                    }
-                }
-                if (!added)
-                    groups.push([a.name, b.name]);
-            }
-        }
+// ──── 去重 (O(n)) ────
+function detectDuplicatesFromScores(scores) {
+    const byName = new Map();
+    for (const s of scores) {
+        const key = s.name.toLowerCase();
+        if (!byName.has(key))
+            byName.set(key, []);
+        byName.get(key).push(s.name);
     }
-    return groups;
+    return [...byName.values()].filter(g => g.length > 1);
 }
-// ──── validateFile（兼容旧接口） ────
+// ──── validateFile ────
 function validateFile(filePath, existingContent) {
     if (!fs.existsSync(filePath)) {
-        return {
-            total: 1,
-            ok: 0,
-            issues: [{ filePath, severity: 'error', message: '文件不存在' }],
-        };
+        return { total: 1, ok: 0, issues: [{ filePath, severity: 'error', message: '文件不存在' }] };
     }
     const content = existingContent ?? fs.readFileSync(filePath, 'utf-8');
     const issues = checkFileWithContent(filePath, content);
     return { total: 1, ok: issues.length === 0 ? 1 : 0, issues };
-}
-function checkFileWithContent(filePath, content) {
-    const issues = checkFrontmatterSyntax(filePath, content);
-    if (issues.length > 0)
-        return issues;
-    const fm = parseFrontmatter(filePath, content);
-    if (!fm)
-        return [{ filePath, severity: 'error', message: 'frontmatter 解析失败' }];
-    const all = [];
-    all.push(...checkRequiredFields(filePath, fm));
-    all.push(...checkOptionalFields(filePath, fm));
-    const fmEnd = content.indexOf('\n---', 3);
-    if (fmEnd !== -1 && content.slice(fmEnd + 4).trim() === '') {
-        all.push({ filePath, severity: 'warning', message: 'body 为空，Skill 不会有任何指令' });
-    }
-    return all;
 }
 //# sourceMappingURL=validator.js.map

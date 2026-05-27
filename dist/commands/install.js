@@ -13,8 +13,9 @@ const validator_1 = require("../core/validator");
 function buildSkillDownloadUrl(repoClean, skillName) {
     const urls = [];
     if (skillName) {
-        urls.push(`https://raw.githubusercontent.com/${repoClean}/main/skills/${skillName}/SKILL.md`);
-        urls.push(`https://raw.githubusercontent.com/${repoClean}/main/${skillName}/SKILL.md`);
+        const safe = (0, installer_1.sanitizeSkillName)(skillName);
+        urls.push(`https://raw.githubusercontent.com/${repoClean}/main/skills/${safe}/SKILL.md`);
+        urls.push(`https://raw.githubusercontent.com/${repoClean}/main/${safe}/SKILL.md`);
     }
     urls.push(`https://raw.githubusercontent.com/${repoClean}/main/SKILL.md`);
     return urls;

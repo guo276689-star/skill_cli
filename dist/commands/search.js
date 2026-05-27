@@ -84,12 +84,8 @@ function getFreshnessColor(iso) {
         return chalk_1.default.dim;
     const diff = Date.now() - new Date(iso).getTime();
     const days = diff / (1000 * 60 * 60 * 24);
-    if (days < 7)
-        return chalk_1.default.green;
     if (days < 30)
         return chalk_1.default.green;
-    if (days < 90)
-        return chalk_1.default.yellow;
     if (days < 365)
         return chalk_1.default.yellow;
     return chalk_1.default.red;

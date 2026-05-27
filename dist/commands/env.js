@@ -41,6 +41,7 @@ const chalk_1 = __importDefault(require("chalk"));
 const os = __importStar(require("os"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const child_process_1 = require("child_process");
 const scanner_1 = require("../core/scanner");
 async function envCommand() {
     console.log(chalk_1.default.bold('🖥️  Skills 环境诊断\n'));
@@ -54,27 +55,17 @@ async function envCommand() {
         detail: `${nodeVer} ${nodeMajor >= 18 ? '' : '(建议 ≥18)'}`,
     });
     // 2. OS
-    checks.push({
-        label: '操作系统',
-        status: 'ok',
-        detail: `${os.type()} ${os.release()}`,
-    });
+    checks.push({ label: '操作系统', status: 'ok', detail: `${os.type()} ${os.release()}` });
     // 3. Skills 目录
     const globalDir = path.join(os.homedir(), '.reasonix', 'skills');
     const projectDir = path.join(process.cwd(), '.reasonix', 'skills');
-    const globalExists = fs.existsSync(globalDir);
-    const projectExists = fs.existsSync(projectDir);
-    const skillDirs = [];
-    if (globalExists)
-        skillDirs.push(globalDir);
-    if (projectExists)
-        skillDirs.push(projectDir);
+    const skillDirs = [globalDir, projectDir].filter(d => fs.existsSync(d));
     checks.push({
         label: 'Skills 目录',
         status: skillDirs.length > 0 ? 'ok' : 'warn',
         detail: skillDirs.length > 0
             ? skillDirs.map(d => d.replace(os.homedir(), '~')).join(', ')
-            : '未找到 Skills 目录',
+            : '未找到',
     });
     // 4. Skills 数量
     const skills = (0, scanner_1.scanLocalSkills)();
@@ -83,64 +74,59 @@ async function envCommand() {
         status: skills.length > 0 ? 'ok' : 'warn',
         detail: skills.length > 0
             ? `${skills.length} 个 (${skills.map(s => s.name).join(', ')})`
-            : '0 个，使用 skills install 安装',
+            : '0 个',
     });
     // 5. GITHUB_TOKEN
-    const hasToken = !!process.env.GITHUB_TOKEN;
     checks.push({
         label: 'GITHUB_TOKEN',
-        status: hasToken ? 'ok' : 'warn',
-        detail: hasToken ? '已设置' : '未设置，search/install 受限',
+        status: process.env.GITHUB_TOKEN ? 'ok' : 'warn',
+        detail: process.env.GITHUB_TOKEN ? '已设置' : '未设置，search/install 受限',
     });
-    // 6. Reasonix CLI
-    const reasonixPaths = ['reasonix', 'npx reasonix'];
-    const reasonixInstalled = (() => {
-        try {
-            const result = require('child_process').execSync('where reasonix 2>nul', { encoding: 'utf-8' });
-            return result.trim().length > 0;
-        }
-        catch {
-            return false;
-        }
-    })();
-    checks.push({
-        label: 'Reasonix CLI',
-        status: reasonixInstalled ? 'ok' : 'warn',
-        detail: reasonixInstalled ? '已安装' : '未检测到',
-    });
-    // 7. Git
-    const gitInstalled = (() => {
-        try {
-            require('child_process').execSync('git --version 2>nul', { encoding: 'utf-8' });
-            return true;
-        }
-        catch {
-            return false;
-        }
-    })();
-    checks.push({
-        label: 'Git',
-        status: gitInstalled ? 'ok' : 'err',
-        detail: gitInstalled ? '已安装' : '未安装',
-    });
+    // 6. Reasonix CLI（跨平台检测）
+    checks.push(checkReasonix());
+    // 7. Git（跨平台检测）
+    checks.push(checkGit());
     // 输出
     for (const c of checks) {
         const icon = c.status === 'ok' ? chalk_1.default.green('✓') : c.status === 'warn' ? chalk_1.default.yellow('⚠') : chalk_1.default.red('✗');
-        const label = c.label.padEnd(18);
-        console.log(`  ${icon} ${label} ${chalk_1.default.dim(c.detail)}`);
+        console.log(`  ${icon} ${c.label.padEnd(18)} ${chalk_1.default.dim(c.detail)}`);
     }
-    // 总结
     const oks = checks.filter(c => c.status === 'ok').length;
     const warns = checks.filter(c => c.status === 'warn').length;
     const errs = checks.filter(c => c.status === 'err').length;
     console.log();
     if (errs === 0 && warns === 0) {
-        console.log(chalk_1.default.green('✅ 环境就绪，所有检查通过'));
+        console.log(chalk_1.default.green('✅ 环境就绪'));
     }
     else {
         console.log(chalk_1.default.green(`${oks} 正常  `) +
             (warns > 0 ? chalk_1.default.yellow(`${warns} 建议修复  `) : '') +
             (errs > 0 ? chalk_1.default.red(`${errs} 必须修复`) : ''));
     }
+}
+function checkBinary(name, args) {
+    try {
+        (0, child_process_1.execSync)(`${name} ${args.join(' ')}`, { stdio: 'ignore', timeout: 3000 });
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+function checkReasonix() {
+    // 先检查 reasonix 二进制，再检查 npx reasonix
+    const installed = checkBinary('reasonix', ['--version']);
+    if (installed)
+        return { label: 'Reasonix CLI', status: 'ok', detail: '已安装' };
+    const npxOk = checkBinary('npx', ['reasonix', '--version']);
+    if (npxOk)
+        return { label: 'Reasonix CLI', status: 'ok', detail: 'npx reasonix 可用' };
+    return { label: 'Reasonix CLI', status: 'warn', detail: '未检测到' };
+}
+function checkGit() {
+    const installed = checkBinary('git', ['--version']);
+    return installed
+        ? { label: 'Git', status: 'ok', detail: '已安装' }
+        : { label: 'Git', status: 'err', detail: '未安装' };
 }
 //# sourceMappingURL=env.js.map

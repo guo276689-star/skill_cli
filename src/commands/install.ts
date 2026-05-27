@@ -1,15 +1,16 @@
 import chalk from 'chalk';
 import ora from 'ora';
 import { fetchSkillContent, parseFrontmatterRaw } from '../core/github';
-import { installSkill, validateRepoFormat } from '../core/installer';
+import { installSkill, validateRepoFormat, sanitizeSkillName } from '../core/installer';
 import { validateFile } from '../core/validator';
 
 /** 构建 GitHub raw 下载 URL */
 function buildSkillDownloadUrl(repoClean: string, skillName?: string): string[] {
   const urls: string[] = [];
   if (skillName) {
-    urls.push(`https://raw.githubusercontent.com/${repoClean}/main/skills/${skillName}/SKILL.md`);
-    urls.push(`https://raw.githubusercontent.com/${repoClean}/main/${skillName}/SKILL.md`);
+    const safe = sanitizeSkillName(skillName);
+    urls.push(`https://raw.githubusercontent.com/${repoClean}/main/skills/${safe}/SKILL.md`);
+    urls.push(`https://raw.githubusercontent.com/${repoClean}/main/${safe}/SKILL.md`);
   }
   urls.push(`https://raw.githubusercontent.com/${repoClean}/main/SKILL.md`);
   return urls;

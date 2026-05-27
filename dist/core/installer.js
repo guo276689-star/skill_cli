@@ -33,29 +33,40 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.installSkill = installSkill;
-exports.forceInstallSkill = forceInstallSkill;
-exports.validateRepoFormat = validateRepoFormat;
 exports.getSkillsDirs = getSkillsDirs;
+exports.clearDirsCache = clearDirsCache;
+exports.installSkill = installSkill;
+exports.validateRepoFormat = validateRepoFormat;
+exports.sanitizeSkillName = sanitizeSkillName;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const os = __importStar(require("os"));
-/** 单个 Skill 文件最大 1 MiB，防止恶意超大文件 */
+/** 单个 Skill 文件最大 1 MiB */
 const MAX_SKILL_SIZE = 1 * 1024 * 1024;
-/** 文件名安全净化：只保留字母数字和连字符 */
+/** 文件名安全净化 */
 const SAFE_NAME_RE = /[^a-zA-Z0-9_\-]/g;
-/** repo 格式校验：owner/name，禁止 query/fragment */
+/** repo 格式：owner/name（禁止含 github.com 前缀） */
 const REPO_FORMAT_RE = /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
 const SKILLS_DIRS = [
-    path.join(os.homedir(), '.reasonix', 'skills'), // 全局
-    path.join(process.cwd(), '.reasonix', 'skills'), // 项目级
+    path.join(os.homedir(), '.reasonix', 'skills'),
+    path.join(process.cwd(), '.reasonix', 'skills'),
 ];
+/** 缓存的已存在 Skills 目录 */
+let _cachedDirs = null;
+function getSkillsDirs() {
+    if (_cachedDirs)
+        return _cachedDirs;
+    _cachedDirs = SKILLS_DIRS.filter(d => fs.existsSync(d));
+    return _cachedDirs;
+}
+/** 清除缓存（目录变化后调用） */
+function clearDirsCache() {
+    _cachedDirs = null;
+}
 /**
- * 安装一个 Skill：将 SKILL.md 内容写入本地。
- * force=true 时跳过已存在检查，强制覆盖。
+ * 安装一个 Skill。force=true 跳过已存在检查。
  */
 function installSkill(content, skillName, scope = 'project', force = false) {
-    // 内容大小检查
     if (content.length > MAX_SKILL_SIZE) {
         return {
             success: false,
@@ -67,9 +78,14 @@ function installSkill(content, skillName, scope = 'project', force = false) {
     const dir = scope === 'global' ? SKILLS_DIRS[0] : SKILLS_DIRS[1];
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
+        clearDirsCache();
     }
-    // 文件名安全净化：不允许 `.` 防止隐藏文件，不允许以 `-` 开头
-    let safeName = skillName.replace(SAFE_NAME_RE, '-').replace(/\./g, '-').replace(/^-+/, '');
+    // Unicode 规范化 + 净化
+    let safeName = skillName
+        .normalize('NFKD')
+        .replace(SAFE_NAME_RE, '-')
+        .replace(/\./g, '-')
+        .replace(/^-+/, '');
     if (!safeName)
         safeName = 'skill';
     const filePath = path.join(dir, `${safeName}.md`);
@@ -82,24 +98,13 @@ function installSkill(content, skillName, scope = 'project', force = false) {
         };
     }
     fs.writeFileSync(filePath, content, 'utf-8');
-    return {
-        success: true,
-        skillName,
-        filePath,
-    };
+    return { success: true, skillName, filePath };
 }
-/** @deprecated 使用 installSkill(content, name, scope, true) 代替 */
-function forceInstallSkill(content, skillName, scope = 'project') {
-    return installSkill(content, skillName, scope, true);
-}
-/** 校验 repo 参数格式 */
 function validateRepoFormat(repo) {
     return REPO_FORMAT_RE.test(repo);
 }
-/**
- * 获取本地 Skills 目录（按优先级：项目级 > 全局）
- */
-function getSkillsDirs() {
-    return SKILLS_DIRS.filter(d => fs.existsSync(d));
+/** 净化 skillName 用于 URL 路径 */
+function sanitizeSkillName(name) {
+    return name.replace(SAFE_NAME_RE, '-').replace(/\./g, '-');
 }
 //# sourceMappingURL=installer.js.map

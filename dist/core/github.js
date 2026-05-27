@@ -172,6 +172,7 @@ async function findSkillFilesInRepo(repoFull) {
         return (data.items ?? []).map(i => i.path);
     }
     catch {
+        // Code Search API 限流或 repo 无 SKILL.md，返回空
         return [];
     }
 }
@@ -213,16 +214,17 @@ async function searchSkills(keyword, options = {}) {
             }
         }
         catch {
-            // skip
+            // repo 被删除或 API 限流，跳过单个 repo 不影响整体结果
         }
     }));
     // 综合排名：stars 归一化 + 新鲜度
     const maxStars = Math.max(1, ...results.map(r => r.repoStars));
-    results.forEach(r => {
-        r._score = (r.repoStars / maxStars) * 0.6 + freshnessScore(r.updatedAt) * 0.4;
-    });
-    results.sort((a, b) => b._score - a._score);
-    return results;
+    const scored = results.map(r => ({
+        ...r,
+        _score: (r.repoStars / maxStars) * 0.6 + freshnessScore(r.updatedAt) * 0.4,
+    }));
+    scored.sort((a, b) => b._score - a._score);
+    return scored;
 }
 /**
  * 搜索 + 获取 frontmatter 描述

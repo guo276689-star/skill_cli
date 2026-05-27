@@ -75,7 +75,7 @@ h2{font-size:20px;font-weight:600;margin-bottom:16px}
     </div>
     <div id="search-results"><div class="empty"><div class="big">🔍</div><p>在上方输入关键词搜索 GitHub 上的 AI Agent Skills</p></div></div>
   </div>
-  <div id="panel-mine" class="panel"><h2>📦 我的 Skills</h2><div id="mine-list"><div class="empty"><p>点击导航加载...</p></div></div></div>
+  <div id="panel-mine" class="panel"><h2>📦 我的 Skills <label style="font-size:12px;font-weight:400;margin-left:12px;cursor:pointer;color:#8b949e"><input type="checkbox" id="mine-all" onchange="loadMine()"> 全盘扫描</label></h2><div id="mine-list"><div class="empty"><p>点击导航加载...</p></div></div></div>
   <div id="panel-quality" class="panel"><h2>📊 质量中心</h2><div id="quality-content"><div class="empty"><p>点击导航加载...</p></div></div></div>
   <div id="panel-env" class="panel"><h2>🖥️ 环境诊断</h2><div id="env-content"><div class="empty"><p>点击导航加载...</p></div></div></div>
 </div>
@@ -156,7 +156,8 @@ async function loadMine() {
   var el = document.getElementById('mine-list');
   el.innerHTML = '<div id="loading">⏳ 加载中...</div>';
 
-  var res = await api('list');
+  var allMode = document.getElementById('mine-all').checked;
+  var res = await api('list', { all: allMode ? '1' : '0' });
   if (!res.ok) { el.innerHTML = '<div class="empty"><p>❌ ' + esc(res.error) + '</p></div>'; return; }
   if (!res.data || !res.data.length) {
     var dirs = res.meta ? res.meta.dirs.join(', ') : '';

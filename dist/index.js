@@ -15,6 +15,7 @@ const info_1 = require("./commands/info");
 const env_1 = require("./commands/env");
 const new_1 = require("./commands/new");
 const review_1 = require("./commands/review");
+const update_1 = require("./commands/update");
 const program = new commander_1.Command();
 program
     .name('skills')
@@ -90,6 +91,12 @@ program
     await (0, review_1.reviewCommand)(name);
 });
 program
+    .command('update [name]')
+    .description('更新已安装的 Skill 到最新版本（无参数更新全部）')
+    .action(async (name) => {
+    await (0, update_1.updateCommand)(name);
+});
+program
     .command('remove <name>')
     .alias('rm')
     .description('移除已安装的 Skill')
@@ -102,6 +109,7 @@ if (process.argv.length <= 2) {
     console.log(chalk_1.default.dim('命令:'));
     console.log(`  ${chalk_1.default.cyan('search <keyword>')}    搜索 GitHub 上的 Skills`);
     console.log(`  ${chalk_1.default.cyan('install <repo> [name]')}  安装 Skill`);
+    console.log(`  ${chalk_1.default.cyan('update [name]')}          更新 Skill`);
     console.log(`  ${chalk_1.default.cyan('new <name>')}            创建新 Skill 脚手架`);
     console.log(`  ${chalk_1.default.cyan('list')}                  列出本地已安装`);
     console.log(`  ${chalk_1.default.cyan('env')}                   环境诊断`);

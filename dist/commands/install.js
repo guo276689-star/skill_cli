@@ -9,6 +9,7 @@ const ora_1 = __importDefault(require("ora"));
 const github_1 = require("../core/github");
 const installer_1 = require("../core/installer");
 const validator_1 = require("../core/validator");
+const tracker_1 = require("../core/tracker");
 /** 构建 GitHub raw 下载 URL */
 function buildSkillDownloadUrl(repoClean, skillName) {
     const urls = [];
@@ -60,6 +61,8 @@ async function installCommand(repo, skillName, options) {
         }
         spinner.succeed(`已安装 ${chalk_1.default.cyan(actualName)}`);
         console.log(`  📄 ${chalk_1.default.dim(result.filePath)}`);
+        // 记录安装来源，以便 skills update
+        (0, tracker_1.trackInstall)(scope, actualName, repoClean, skillName ?? actualName);
         if (fm.description) {
             console.log(`  📝 ${fm.description}`);
         }

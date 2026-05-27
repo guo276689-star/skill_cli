@@ -38,8 +38,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.removeCommand = removeCommand;
 const fs = __importStar(require("fs"));
+const os = __importStar(require("os"));
 const chalk_1 = __importDefault(require("chalk"));
 const scanner_1 = require("../core/scanner");
+const tracker_1 = require("../core/tracker");
 async function removeCommand(name) {
     const skill = (0, scanner_1.findSkillByName)(name);
     if (!skill) {
@@ -51,6 +53,9 @@ async function removeCommand(name) {
         fs.unlinkSync(skill.filePath);
         console.log(chalk_1.default.green(`已移除 ${chalk_1.default.cyan(skill.name)}`));
         console.log(`  📄 ${chalk_1.default.dim(skill.filePath)}`);
+        // 清除来源记录
+        const scope = skill.filePath.includes(os.homedir()) ? 'global' : 'project';
+        (0, tracker_1.trackRemove)(scope, skill.name);
     }
     catch (err) {
         const message = err instanceof Error ? err.message : String(err);

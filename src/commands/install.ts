@@ -3,6 +3,7 @@ import ora from 'ora';
 import { fetchSkillContent, parseFrontmatterRaw } from '../core/github';
 import { installSkill, validateRepoFormat, sanitizeSkillName } from '../core/installer';
 import { validateFile } from '../core/validator';
+import { trackInstall } from '../core/tracker';
 
 /** 构建 GitHub raw 下载 URL */
 function buildSkillDownloadUrl(repoClean: string, skillName?: string): string[] {
@@ -67,6 +68,9 @@ export async function installCommand(
 
     spinner.succeed(`已安装 ${chalk.cyan(actualName)}`);
     console.log(`  📄 ${chalk.dim(result.filePath)}`);
+
+    // 记录安装来源，以便 skills update
+    trackInstall(scope, actualName, repoClean, skillName ?? actualName);
 
     if (fm.description) {
       console.log(`  📝 ${fm.description}`);

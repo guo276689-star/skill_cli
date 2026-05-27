@@ -10,6 +10,7 @@ import { infoCommand } from './commands/info';
 import { envCommand } from './commands/env';
 import { newCommand } from './commands/new';
 import { reviewCommand } from './commands/review';
+import { updateCommand } from './commands/update';
 
 const program = new Command();
 
@@ -96,6 +97,13 @@ program
   });
 
 program
+  .command('update [name]')
+  .description('更新已安装的 Skill 到最新版本（无参数更新全部）')
+  .action(async (name?: string) => {
+    await updateCommand(name);
+  });
+
+program
   .command('remove <name>')
   .alias('rm')
   .description('移除已安装的 Skill')
@@ -109,6 +117,7 @@ if (process.argv.length <= 2) {
   console.log(chalk.dim('命令:'));
   console.log(`  ${chalk.cyan('search <keyword>')}    搜索 GitHub 上的 Skills`);
   console.log(`  ${chalk.cyan('install <repo> [name]')}  安装 Skill`);
+  console.log(`  ${chalk.cyan('update [name]')}          更新 Skill`);
   console.log(`  ${chalk.cyan('new <name>')}            创建新 Skill 脚手架`);
   console.log(`  ${chalk.cyan('list')}                  列出本地已安装`);
   console.log(`  ${chalk.cyan('env')}                   环境诊断`);

@@ -18,6 +18,9 @@ const review_1 = require("./commands/review");
 const update_1 = require("./commands/update");
 const diff_1 = require("./commands/diff");
 const serve_1 = require("./commands/serve");
+const freeze_1 = require("./commands/freeze");
+const bundle_1 = require("./commands/bundle");
+const completion_1 = require("./commands/completion");
 const program = new commander_1.Command();
 program
     .name('skills')
@@ -33,14 +36,16 @@ program
     await (0, search_1.searchCommand)(keyword, { minStars, updatedWithin: options?.updatedWithin });
 });
 program
-    .command('install <repo> [skill-name]')
+    .command('install [repo] [skill-name]')
     .description('从 GitHub 仓库安装 Skill')
     .option('-f, --force', '强制覆盖已存在的 Skill')
     .option('-g, --global', '安装到全局 (~/.reasonix/skills)', false)
+    .option('--from <file>', '从 freeze 导出的 JSON 批量安装')
     .action(async (repo, skillName, options) => {
-    await (0, install_1.installCommand)(repo, skillName, {
+    await (0, install_1.installCommand)(repo || '', skillName, {
         force: options?.force,
         scope: options?.global ? 'global' : 'project',
+        from: options?.from,
     });
 });
 program
@@ -106,6 +111,24 @@ program
     await (0, update_1.updateCommand)(name);
 });
 program
+    .command('completion [shell]')
+    .description('生成 Tab 补全脚本（bash/zsh/powershell）')
+    .action(async (shell) => {
+    await (0, completion_1.completionCommand)(shell);
+});
+program
+    .command('bundle [action] [name]')
+    .description('Skill 套装管理（list / install）')
+    .action(async (action, name) => {
+    await (0, bundle_1.bundleCommand)(action, name);
+});
+program
+    .command('freeze [output]')
+    .description('导出已安装 Skill 清单（JSON），用于分享或备份')
+    .action(async (output) => {
+    await (0, freeze_1.freezeCommand)(output);
+});
+program
     .command('serve')
     .alias('ui')
     .description('启动图形化界面（浏览器打开）')
@@ -133,6 +156,7 @@ if (process.argv.length <= 2) {
     console.log(`  ${chalk_1.default.cyan('info [name]')}           查看 Skill 详细信息`);
     console.log(`  ${chalk_1.default.cyan('review <name>')}         AI 评审 Skill 能力`);
     console.log(`  ${chalk_1.default.cyan('doctor [name]')}         健康检查（--deep 深度）`);
+    console.log(`  ${chalk_1.default.cyan('freeze [file]')}          导出 Skill 清单`);
     console.log(`  ${chalk_1.default.cyan('serve')}                 启动图形化界面 🆕`);
     console.log(`  ${chalk_1.default.cyan('remove <name>')}          移除 Skill`);
     console.log();

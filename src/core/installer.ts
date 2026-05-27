@@ -27,39 +27,55 @@ export function getSkillsDirs(all = false): string[] {
     return _cachedDirs;
   }
 
-  // --all 模式：扫描全局 + 所有已知项目
+  // --all 模式：扫描所有 AI 工具的 skills 目录
   const dirs = new Set<string>();
+  const home = os.homedir();
 
-  // 全局
-  if (fs.existsSync(SKILLS_DIRS[0])) dirs.add(SKILLS_DIRS[0]);
+  // 所有工具的全局 skills 目录
+  const globalPatterns = [
+    ['.reasonix', 'skills'],
+    ['.claude', 'skills'],
+    ['AppData', 'Roaming', 'npm', 'node_modules', '@anthropic', 'claude-code', 'skills'],
+    ['.codex', 'skills'],
+    ['.openai', 'skills'],
+    ['.gemini', 'skills'],
+    ['.agents', 'skills'],
+    ['.antigravity', 'skills'],
+    ['.cursor', 'skills'],
+  ];
 
-  // 当前项目
-  if (fs.existsSync(SKILLS_DIRS[1])) dirs.add(SKILLS_DIRS[1]);
+  for (const parts of globalPatterns) {
+    const dir = path.join(home, ...parts);
+    if (fs.existsSync(dir)) dirs.add(dir);
+  }
 
-  // 从 config.json 读取其他项目
-  const configPath = path.join(os.homedir(), '.reasonix', 'config.json');
+  // 当前项目的所有工具 skills 目录
+  const cwd = process.cwd();
+  const projectPatterns = [
+    ['.reasonix', 'skills'],
+    ['.claude', 'skills'],
+    ['.codex', 'skills'],
+    ['.gemini', 'skills'],
+    ['.agents', 'skills'],
+    ['.cursor', 'skills'],
+  ];
+
+  for (const parts of projectPatterns) {
+    const dir = path.join(cwd, ...parts);
+    if (fs.existsSync(dir)) dirs.add(dir);
+  }
+
+  // Reasonix config.json 中记录的其他项目
+  const configPath = path.join(home, '.reasonix', 'config.json');
   try {
     if (fs.existsSync(configPath)) {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       if (config.projects) {
         for (const projectPath of Object.keys(config.projects)) {
-          const skillsDir = path.join(projectPath, '.reasonix', 'skills');
-          if (fs.existsSync(skillsDir)) dirs.add(skillsDir);
-        }
-      }
-    }
-  } catch { /* config 解析失败则跳过 */ }
-
-  // 扫描 ~/.reasonix/skills/ 中的子目录（目录式 Skill）
-  const globalSkillsDir = SKILLS_DIRS[0];
-  try {
-    if (fs.existsSync(globalSkillsDir)) {
-      const entries = fs.readdirSync(globalSkillsDir, { withFileTypes: true });
-      for (const e of entries) {
-        if (e.isDirectory()) {
-          const subDir = path.join(globalSkillsDir, e.name);
-          if (fs.existsSync(path.join(subDir, 'SKILL.md'))) {
-            dirs.add(globalSkillsDir); // 已在列表中
+          if (projectPath === cwd) continue; // 已扫描
+          for (const parts of projectPatterns) {
+            const subDir = path.join(projectPath, ...parts);
+            if (fs.existsSync(subDir)) dirs.add(subDir);
           }
         }
       }

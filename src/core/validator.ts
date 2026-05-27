@@ -226,51 +226,93 @@ function computeScoreFromContent(filePath: string, raw: string): SkillScore | nu
   const breakdown: { category: string; points: number; max: number }[] = [];
   let score = 0;
 
-  // frontmatter 完整性 (30)
-  if (fmMatch) { score += 10; breakdown.push({ category: 'frontmatter 存在', points: 10, max: 10 }); }
-  else { breakdown.push({ category: 'frontmatter 存在', points: 0, max: 10 }); return { name, filePath, score: 0, grade: 'F', breakdown, body }; }
+  // ── 1. frontmatter 完整性 (22) ──
+  if (fmMatch) { score += 8; breakdown.push({ category: 'frontmatter 存在', points: 8, max: 8 }); }
+  else { breakdown.push({ category: 'frontmatter 存在', points: 0, max: 8 }); return { name, filePath, score: 0, grade: 'F', breakdown, body }; }
 
-  if (fm?.name) { score += 8; breakdown.push({ category: 'name 字段', points: 8, max: 8 }); }
-  else breakdown.push({ category: 'name 字段', points: 0, max: 8 });
+  if (fm?.name) { score += 5; breakdown.push({ category: 'name 字段', points: 5, max: 5 }); }
+  else breakdown.push({ category: 'name 字段', points: 0, max: 5 });
 
-  if (fm?.description) { score += 7; breakdown.push({ category: 'description 字段', points: 7, max: 7 }); }
-  else breakdown.push({ category: 'description 字段', points: 0, max: 7 });
+  if (fm?.description) { score += 5; breakdown.push({ category: 'description 字段', points: 5, max: 5 }); }
+  else breakdown.push({ category: 'description 字段', points: 0, max: 5 });
 
-  if (fm?.runAs === 'subagent' || fm?.runAs === 'inline') { score += 5; breakdown.push({ category: 'runAs 字段', points: 5, max: 5 }); }
-  else breakdown.push({ category: 'runAs 字段', points: 0, max: 5 });
+  if (fm?.runAs === 'subagent' || fm?.runAs === 'inline') { score += 4; breakdown.push({ category: 'runAs 字段', points: 4, max: 4 }); }
+  else breakdown.push({ category: 'runAs 字段', points: 0, max: 4 });
 
-  // body 质量 (30)
+  // ── 2. body 质量 (25) ──
   const bodyLines = body.split('\n').filter(l => l.trim());
-  if (bodyLines.length >= 5) { score += 10; breakdown.push({ category: 'body 行数 ≥5', points: 10, max: 10 }); }
-  else { score += Math.min(bodyLines.length * 2, 10); breakdown.push({ category: 'body 行数', points: Math.min(bodyLines.length * 2, 10), max: 10 }); }
+  if (bodyLines.length >= 10) { score += 7; breakdown.push({ category: 'body 行数 ≥10', points: 7, max: 7 }); }
+  else if (bodyLines.length >= 5) { score += 4; breakdown.push({ category: 'body 行数 ≥5', points: 4, max: 7 }); }
+  else { score += Math.min(bodyLines.length, 2); breakdown.push({ category: 'body 行数', points: Math.min(bodyLines.length, 2), max: 7 }); }
 
   const hasSteps = /##\s*(步骤|执行|Steps?|Instructions?|任务)/i.test(body);
-  if (hasSteps) { score += 10; breakdown.push({ category: '有结构化步骤', points: 10, max: 10 }); }
-  else breakdown.push({ category: '有结构化步骤', points: 0, max: 10 });
+  if (hasSteps) { score += 9; breakdown.push({ category: '有结构化步骤', points: 9, max: 9 }); }
+  else breakdown.push({ category: '有结构化步骤', points: 0, max: 9 });
 
   const hasChecklist = /[-*]\s+(\*\*|__)?[^\n]+(\*\*|__)?/.test(body);
-  if (hasChecklist) { score += 10; breakdown.push({ category: '有检查清单', points: 10, max: 10 }); }
-  else breakdown.push({ category: '有检查清单', points: 0, max: 10 });
+  if (hasChecklist) { score += 9; breakdown.push({ category: '有检查清单', points: 9, max: 9 }); }
+  else breakdown.push({ category: '有检查清单', points: 0, max: 9 });
 
-  // 配置质量 (15)
+  // ── 3. body 内容深度 (18) ──
+  score += scoreBodyDepth(body, breakdown);
+
+  // ── 4. 配置质量 (12) ──
   if (fm?.model && typeof fm.model === 'string' && fm.model.startsWith('deepseek-')) {
-    score += 5; breakdown.push({ category: 'model 配置', points: 5, max: 5 });
-  } else if (!fm?.model) { score += 3; breakdown.push({ category: 'model 配置 (默认)', points: 3, max: 5 }); }
-  else breakdown.push({ category: 'model 配置', points: 0, max: 5 });
+    score += 4; breakdown.push({ category: 'model 配置', points: 4, max: 4 });
+  } else if (!fm?.model) { score += 2; breakdown.push({ category: 'model 配置 (默认)', points: 2, max: 4 }); }
+  else breakdown.push({ category: 'model 配置', points: 0, max: 4 });
 
   if (fm?.allowedTools && Array.isArray(fm.allowedTools) && fm.allowedTools.length > 0) {
-    score += 10; breakdown.push({ category: 'allowedTools 配置', points: 10, max: 10 });
-  } else { score += 5; breakdown.push({ category: 'allowedTools 配置 (全部可用)', points: 5, max: 10 }); }
+    score += 8; breakdown.push({ category: 'allowedTools 配置', points: 8, max: 8 });
+  } else { score += 4; breakdown.push({ category: 'allowedTools 配置 (全部可用)', points: 4, max: 8 }); }
 
-  // 安全性 (25)
+  // ── 5. 安全性 (23) ──
   const secResult = scanSecurity(body);
-  const secPenalty = secResult.filter(s => s.severity === 'error').length * 8 + secResult.filter(s => s.severity === 'warning').length * 4;
-  const secScore = Math.max(0, 25 - secPenalty);
+  const secPenalty = secResult.filter(s => s.severity === 'error').length * 7 + secResult.filter(s => s.severity === 'warning').length * 3;
+  const secScore = Math.max(0, 23 - secPenalty);
   score += secScore;
-  breakdown.push({ category: '安全性', points: secScore, max: 25 });
+  breakdown.push({ category: '安全性', points: secScore, max: 23 });
 
   const grade = score >= 90 ? 'A' : score >= 70 ? 'B' : score >= 50 ? 'C' : score >= 30 ? 'D' : 'F';
   return { name, filePath, score, grade, breakdown, body };
+}
+
+/** body 内容深度评分 (18 分) */
+function scoreBodyDepth(body: string, breakdown: { category: string; points: number; max: number }[]): number {
+  let score = 0;
+
+  // 指令具体性 (5): 是否有执行动词
+  const actionVerbs = /\b(读取|检查|验证|写入|运行|搜索|分析|审查|生成|执行|调用|返回|解析|检测|查找|识别|read|check|verify|write|run|search|analyze|review|generate|execute|call|return|parse|detect|find|identify)\b/i;
+  const verbMatches = (body.match(actionVerbs) || []).length;
+  if (verbMatches >= 8) { score += 5; breakdown.push({ category: '指令具体性 (动词≥8)', points: 5, max: 5 }); }
+  else if (verbMatches >= 4) { score += 3; breakdown.push({ category: '指令具体性 (动词≥4)', points: 3, max: 5 }); }
+  else if (verbMatches >= 1) { score += 1; breakdown.push({ category: '指令具体性 (有动词)', points: 1, max: 5 }); }
+  else breakdown.push({ category: '指令具体性', points: 0, max: 5 });
+
+  // 约束覆盖 (4): 是否有限制条件
+  const constraints = /\b(不要|禁止|只允许|必须|避免|注意|切勿|不得|仅限|最多|最少|优先|do not|must not|never|only|must|avoid|ensure|restrict)\b/i;
+  const constraintMatches = (body.match(constraints) || []).length;
+  if (constraintMatches >= 5) { score += 4; breakdown.push({ category: '约束覆盖 (≥5)', points: 4, max: 4 }); }
+  else if (constraintMatches >= 2) { score += 2; breakdown.push({ category: '约束覆盖 (≥2)', points: 2, max: 4 }); }
+  else breakdown.push({ category: '约束覆盖', points: 0, max: 4 });
+
+  // 输出格式 (3): 是否定义了输出格式
+  const outputFormat = /(输出|返回|output|return).*(Markdown|JSON|表格|列表|代码块|YAML|报告|table|list|code|report)/i;
+  if (outputFormat.test(body)) { score += 3; breakdown.push({ category: '输出格式定义', points: 3, max: 3 }); }
+  else breakdown.push({ category: '输出格式定义', points: 0, max: 3 });
+
+  // 代码示例 (3): 是否有代码块
+  const codeBlocks = (body.match(/```/g) || []).length;
+  if (codeBlocks >= 4) { score += 3; breakdown.push({ category: '代码示例 (≥2 块)', points: 3, max: 3 }); }
+  else if (codeBlocks >= 2) { score += 2; breakdown.push({ category: '代码示例 (1 块)', points: 2, max: 3 }); }
+  else breakdown.push({ category: '代码示例', points: 0, max: 3 });
+
+  // 边界处理 (3): 是否有错误/边界/异常说明
+  const edgeCases = /\b(错误|异常|边界|失败|超时|为空|不存在|error|exception|edge|fail|timeout|null|empty|not found)\b/i;
+  if (edgeCases.test(body)) { score += 3; breakdown.push({ category: '边界/异常处理', points: 3, max: 3 }); }
+  else breakdown.push({ category: '边界/异常处理', points: 0, max: 3 });
+
+  return score;
 }
 
 // ──── 安全扫描 ────

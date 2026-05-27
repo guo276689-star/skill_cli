@@ -9,6 +9,7 @@ import { removeCommand } from './commands/remove';
 import { infoCommand } from './commands/info';
 import { envCommand } from './commands/env';
 import { newCommand } from './commands/new';
+import { reviewCommand } from './commands/review';
 
 const program = new Command();
 
@@ -88,6 +89,13 @@ program
   });
 
 program
+  .command('review <name>')
+  .description('AI 评审 Skill 能力（规则分析 + 提示 AI 深度评审）')
+  .action(async (name: string) => {
+    await reviewCommand(name);
+  });
+
+program
   .command('remove <name>')
   .alias('rm')
   .description('移除已安装的 Skill')
@@ -105,6 +113,7 @@ if (process.argv.length <= 2) {
   console.log(`  ${chalk.cyan('list')}                  列出本地已安装`);
   console.log(`  ${chalk.cyan('env')}                   环境诊断`);
   console.log(`  ${chalk.cyan('info [name]')}           查看 Skill 详细信息`);
+  console.log(`  ${chalk.cyan('review <name>')}         AI 评审 Skill 能力`);
   console.log(`  ${chalk.cyan('doctor [name]')}         健康检查（--deep 深度）`);
   console.log(`  ${chalk.cyan('remove <name>')}          移除 Skill`);
   console.log();

@@ -14,6 +14,7 @@ const remove_1 = require("./commands/remove");
 const info_1 = require("./commands/info");
 const env_1 = require("./commands/env");
 const new_1 = require("./commands/new");
+const review_1 = require("./commands/review");
 const program = new commander_1.Command();
 program
     .name('skills')
@@ -83,6 +84,12 @@ program
     await (0, doctor_1.doctorCommand)(name, { deep: options?.deep });
 });
 program
+    .command('review <name>')
+    .description('AI 评审 Skill 能力（规则分析 + 提示 AI 深度评审）')
+    .action(async (name) => {
+    await (0, review_1.reviewCommand)(name);
+});
+program
     .command('remove <name>')
     .alias('rm')
     .description('移除已安装的 Skill')
@@ -99,6 +106,7 @@ if (process.argv.length <= 2) {
     console.log(`  ${chalk_1.default.cyan('list')}                  列出本地已安装`);
     console.log(`  ${chalk_1.default.cyan('env')}                   环境诊断`);
     console.log(`  ${chalk_1.default.cyan('info [name]')}           查看 Skill 详细信息`);
+    console.log(`  ${chalk_1.default.cyan('review <name>')}         AI 评审 Skill 能力`);
     console.log(`  ${chalk_1.default.cyan('doctor [name]')}         健康检查（--deep 深度）`);
     console.log(`  ${chalk_1.default.cyan('remove <name>')}          移除 Skill`);
     console.log();

@@ -7,6 +7,8 @@ import { listCommand } from './commands/list';
 import { doctorCommand } from './commands/doctor';
 import { removeCommand } from './commands/remove';
 import { infoCommand } from './commands/info';
+import { envCommand } from './commands/env';
+import { newCommand } from './commands/new';
 
 const program = new Command();
 
@@ -46,6 +48,31 @@ program
   });
 
 program
+  .command('new <name>')
+  .description('创建新 Skill 脚手架')
+  .option('-d, --desc <text>', 'Skill 描述')
+  .option('-r, --run-as <mode>', '运行模式: inline | subagent')
+  .option('-g, --global', '创建到全局 (~/.reasonix/skills)')
+  .option('-m, --model <name>', '模型（如 deepseek-v4-flash）')
+  .option('-t, --tools <list>', '工具白名单（逗号分隔）')
+  .action(async (name: string, options?: { desc?: string; runAs?: string; global?: boolean; model?: string; tools?: string }) => {
+    await newCommand(name, {
+      desc: options?.desc,
+      runAs: options?.runAs,
+      scope: options?.global ? 'global' : 'project',
+      model: options?.model,
+      tools: options?.tools,
+    });
+  });
+
+program
+  .command('env')
+  .description('环境诊断：检查 Node/Git/Token/Skills/Reasonix 状态')
+  .action(async () => {
+    await envCommand();
+  });
+
+program
   .command('info [name]')
   .description('查看 Skill 详细信息（frontmatter + body 预览）')
   .action(async (name?: string) => {
@@ -55,8 +82,9 @@ program
 program
   .command('doctor [name]')
   .description('检查 Skills 格式和兼容性')
-  .action(async (name?: string) => {
-    await doctorCommand(name);
+  .option('-d, --deep', '深度检查：质量评分 + 安全扫描 + 兼容矩阵 + 去重')
+  .action(async (name?: string, options?: { deep?: boolean }) => {
+    await doctorCommand(name, { deep: options?.deep });
   });
 
 program
@@ -73,9 +101,11 @@ if (process.argv.length <= 2) {
   console.log(chalk.dim('命令:'));
   console.log(`  ${chalk.cyan('search <keyword>')}    搜索 GitHub 上的 Skills`);
   console.log(`  ${chalk.cyan('install <repo> [name]')}  安装 Skill`);
+  console.log(`  ${chalk.cyan('new <name>')}            创建新 Skill 脚手架`);
   console.log(`  ${chalk.cyan('list')}                  列出本地已安装`);
+  console.log(`  ${chalk.cyan('env')}                   环境诊断`);
   console.log(`  ${chalk.cyan('info [name]')}           查看 Skill 详细信息`);
-  console.log(`  ${chalk.cyan('doctor [name]')}         健康检查`);
+  console.log(`  ${chalk.cyan('doctor [name]')}         健康检查（--deep 深度）`);
   console.log(`  ${chalk.cyan('remove <name>')}          移除 Skill`);
   console.log();
   console.log(chalk.dim('示例:'));
